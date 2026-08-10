@@ -2,7 +2,7 @@
 
 # Nebula
 
-Nebula is [Suprnova](https://github.com/entrepeneur4lyf/suprnova)'s Tier-1
+Nebula is [Suprnova](https://github.com/eas4ai/suprnova)'s Tier-1
 starter kit — the Breeze equivalent. It gives a new app a complete,
 production-shaped account story on day one:
 
@@ -26,17 +26,17 @@ rename it, build your app on top.
 ### Part of the Suprnova kit family
 
 Nebula is the auth-focused kit. Need more out of the box?
-**[Pulsar](https://github.com/entrepeneur4lyf/Pulsar)** is the full
+**[Pulsar](https://github.com/eas4ai/Pulsar)** is the full
 product-site kit — marketing landing, docs pipeline, blog with RSS, member
 community, and role-based access control — on Vue 3.5 + Vuetify. See every kit
-in the [Suprnova manual](https://github.com/entrepeneur4lyf/suprnova/blob/main/manual/starter-kits.md).
+in the [Suprnova manual](https://github.com/eas4ai/suprnova/blob/main/manual/starter-kits.md).
 
 ## Quickstart
 
 You'll need Rust (stable), Node 20+, and the Suprnova CLI:
 
 ```bash
-cargo install --git https://github.com/entrepeneur4lyf/suprnova.git suprnova-cli
+cargo install --git https://github.com/eas4ai/suprnova.git suprnova-cli
 ```
 
 Then:
