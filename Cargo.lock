@@ -3506,7 +3506,6 @@ dependencies = [
  "bytes",
  "chrono",
  "clap",
- "dotenvy",
  "http-body-util",
  "hyper",
  "hyper-util",

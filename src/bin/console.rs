@@ -16,12 +16,29 @@
 //! so the multi-threaded worker pool would buy nothing. Bootstrap
 //! runs only when a real subcommand is matched, so `console --help`
 //! and `console --version` work without DATABASE_URL set.
+//!
+//! `#[suprnova::main]`, not `#[tokio::main]`: loading `.env` writes the
+//! process environment, which is only sound while the process is
+//! single-threaded. The macro loads it before building the runtime.
 
 use std::process::ExitCode;
 
-#[tokio::main(flavor = "current_thread")]
+#[suprnova::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
-    let _ = dotenvy::dotenv();
+    // The server binary inherits this check from `Application::run`;
+    // the console never reaches that path, so make it here. Reverting
+    // to `#[tokio::main]` + `dotenvy::dotenv()` would otherwise keep
+    // working - unsoundly, writing the process environment after the
+    // runtime's threads exist - with nothing to say so.
+    if !suprnova::boot::env_loaded_pre_runtime() {
+        eprintln!(
+            "console: the environment was loaded after the Tokio runtime started, \
+             which is an unsound write to the process environment. Put \
+             #[suprnova::main(flavor = \"current_thread\")] on `fn main`, not \
+             #[tokio::main]."
+        );
+        return ExitCode::FAILURE;
+    }
 
     // Surface this project's package version via `--version` and
     // `--help`. `env!("CARGO_PKG_VERSION")` reflects nebula,
