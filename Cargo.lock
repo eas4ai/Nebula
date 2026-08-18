@@ -6163,8 +6163,8 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "suprnova"
-version = "1.2.0"
-source = "git+https://github.com/eas4ai/suprnova.git?tag=v1.2.1#61b347e704a442f45a5c1c0dc333f8f6906e1f68"
+version = "1.2.4"
+source = "git+https://github.com/eas4ai/suprnova.git?tag=v1.2.4#e6815237f330c358b672f190fe25a802946ec2cf"
 dependencies = [
  "aes-gcm",
  "ammonia",
@@ -6267,8 +6267,8 @@ dependencies = [
 
 [[package]]
 name = "suprnova-macros"
-version = "1.2.0"
-source = "git+https://github.com/eas4ai/suprnova.git?tag=v1.2.1#61b347e704a442f45a5c1c0dc333f8f6906e1f68"
+version = "1.2.4"
+source = "git+https://github.com/eas4ai/suprnova.git?tag=v1.2.4#e6815237f330c358b672f190fe25a802946ec2cf"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6280,8 +6280,8 @@ dependencies = [
 
 [[package]]
 name = "suprnova-web-push"
-version = "1.2.0"
-source = "git+https://github.com/eas4ai/suprnova.git?tag=v1.2.1#61b347e704a442f45a5c1c0dc333f8f6906e1f68"
+version = "1.2.4"
+source = "git+https://github.com/eas4ai/suprnova.git?tag=v1.2.4#e6815237f330c358b672f190fe25a802946ec2cf"
 dependencies = [
  "base64 0.22.1",
  "chrono",
