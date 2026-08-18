@@ -28,16 +28,16 @@ use std::sync::Arc;
 #[allow(unused_imports)]
 use suprnova::{
     App, Auth, AuthConfig, AuthManager, CsrfMiddleware, DB, EloquentUserProvider, FrameworkError,
-    IncludeMiddleware, Inertia, InertiaConfig, InertiaRequestExt, InertiaSharedData, Prop,
-    SessionConfig, SessionMiddleware, bind, global_middleware, indexmap::IndexMap, serde_json,
-    singleton,
+    Frontend, IncludeMiddleware, Inertia, InertiaConfig, InertiaRequestExt, InertiaSharedData,
+    Prop, SessionConfig, SessionMiddleware, bind, global_middleware, indexmap::IndexMap,
+    serde_json, singleton,
 };
 
 use crate::middleware;
 use crate::models::user::User;
 
-/// Shares the authenticated user on every Inertia response as `auth.user`
-/// — the shape `frontend/src/types/auth.ts` declares and `Layout.svelte`
+/// Shares the authenticated user on every Inertia response as `auth.user` -
+/// the shape `frontend/src/types/auth.ts` declares and `Layout.svelte`
 /// renders the user menu / Dashboard nav link from. Guests share
 /// `auth.user: null` so pages can branch on it without optional-chaining
 /// surprises.
@@ -72,6 +72,12 @@ impl InertiaSharedData for AuthShare {
 ///
 /// Called from cmd/main.rs before `Server::from_config()`.
 /// Middleware and services registered here can use environment variables, config files, etc.
+/// Inertia asset version: the version middleware bounces clients whose
+/// cached bundle no longer matches. Bump when you ship new frontend assets
+/// (or replace with a build hash) - it reaches both the middleware and every
+/// page object, because `Inertia::install` retains its config.
+pub const INERTIA_VERSION: &str = "1.0";
+
 pub async fn register() {
     // Initialize database connection
     DB::init().await.expect("Failed to connect to database");
@@ -101,20 +107,21 @@ pub async fn register() {
     Auth::register_provider("users", Arc::new(EloquentUserProvider::<User>::new()))
         .expect("register users provider");
 
-    // Inertia protocol middlewares: the 409 version-mismatch handshake
-    // (stale clients hard-reload to pick up new assets) and the 302→303
-    // upgrade on non-GET redirects. Without the 303 upgrade a browser
-    // replays a PATCH/PUT/DELETE verbatim against the redirect target,
-    // looping until its 20-redirect cap kills the visit.
+    // Inertia protocol layer, three middlewares in one call: the headers
+    // middleware (`Vary: X-Inertia` on every response, and an empty 200 on
+    // an Inertia visit substituted with a 303 back), the version middleware
+    // (409 + `X-Inertia-Location` when the client's asset version doesn't
+    // match INERTIA_VERSION, reflashing the session so errors survive the
+    // reload), and the 303 middleware (302 -> 303 on non-GET redirects, so
+    // a browser doesn't replay a PATCH/PUT/DELETE against the redirect
+    // target until its 20-redirect cap kills the visit).
     //
-    // The version given here MUST match the one the page responses embed,
-    // or every Inertia GET answers 409 and the client hard-reloads on each
-    // navigation. The kit's `inertia_response!` calls use the default
-    // `InertiaConfig` (static version "1.0"), so install with that same
-    // default. If you wire a real asset version (e.g. a build hash), set
-    // it both here and on every response's config.
-    Inertia::install(&InertiaConfig::new())
-        .expect("Inertia install failed — in production this fails closed when the frontend manifest has not been built");
+    // The config passed here is the default every `InertiaResponse` starts
+    // from (framework v1.2.4), so INERTIA_VERSION is the one named place to
+    // bump when you ship new assets, and the pinned frontend reaches the
+    // rendered HTML shell without `SUPRNOVA_FRONTEND` being set at runtime.
+    Inertia::install(&InertiaConfig::new().version(INERTIA_VERSION).frontend(Frontend::Svelte))
+        .expect("Inertia install failed - in production this fails closed when the frontend manifest has not been built");
 
     // Share the authenticated user (`auth.user`) on every Inertia
     // response so the layout can render the user menu without each

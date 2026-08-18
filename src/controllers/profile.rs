@@ -5,14 +5,14 @@
 //! unverified-yet-logged-in user can still update their profile (and, by
 //! changing their email, re-trigger verification):
 //!
-//! - `GET    /profile`          — render the profile page seeded from the
+//! - `GET    /profile` - render the profile page seeded from the
 //!   current user.
-//! - `PATCH  /profile`          — update name/email. Changing the email nulls
+//! - `PATCH  /profile` - update name/email. Changing the email nulls
 //!   the verification timestamp and re-sends the verification link
-//!   (best-effort — a mail failure must not 500 the update).
-//! - `PUT    /profile/password` — rotate the password, gated on the current
+//!   (best-effort - a mail failure must not 500 the update).
+//! - `PUT    /profile/password` - rotate the password, gated on the current
 //!   password.
-//! - `DELETE /profile`          — password-gated account deletion: verify the
+//! - `DELETE /profile` - password-gated account deletion: verify the
 //!   password, log out, then delete the row.
 //!
 //! Validation runs through `controllers::inertia_form`: an `X-Inertia`
@@ -79,7 +79,7 @@ impl FormRequest for UpdatePasswordRequest {
 }
 
 /// The delete body carries only the confirming password. There are no shape
-/// rules — the password is checked against the stored hash in the handler,
+/// rules - the password is checked against the stored hash in the handler,
 /// and a mismatch surfaces on the `password` field.
 #[derive(Deserialize, Validate)]
 pub struct DeleteAccountRequest {
@@ -94,7 +94,7 @@ impl FormRequest for DeleteAccountRequest {}
 
 /// Resolve the currently authenticated user as the concrete `User` model.
 /// These routes are behind `AuthMiddleware`, so a missing user means the
-/// session expired between the gate and the handler — surface it as a 401.
+/// session expired between the gate and the handler - surface it as a 401.
 async fn current_user() -> Result<User, FrameworkError> {
     Auth::user_as::<User>()
         .await?
@@ -122,7 +122,7 @@ async fn render_profile(ctx: &InertiaCtx, errors: ValidationErrors) -> Response 
 // Handlers
 // ============================================================================
 
-/// `GET /profile` — render the profile page seeded from the current user.
+/// `GET /profile` - render the profile page seeded from the current user.
 #[handler]
 pub async fn show(req: Request) -> Response {
     let user = current_user().await?;
@@ -137,11 +137,11 @@ pub async fn show(req: Request) -> Response {
     )
 }
 
-/// `PATCH /profile` — update name/email.
+/// `PATCH /profile` - update name/email.
 ///
 /// Changing the email address invalidates the existing verification: we null
 /// the `email_verified_at` timestamp and re-send the verification link. That
-/// send is best-effort — the row update has already succeeded, so a mail
+/// send is best-effort - the row update has already succeeded, so a mail
 /// failure (e.g. misconfigured `MAIL_FROM`) is logged and swallowed rather
 /// than 500-ing the update. The user lands back on `/profile` showing
 /// "not verified" and can resend from the verification notice.
@@ -187,7 +187,7 @@ pub async fn update(req: Request) -> Response {
     redirect!("/profile").into()
 }
 
-/// `PUT /profile/password` — rotate the password.
+/// `PUT /profile/password` - rotate the password.
 ///
 /// Gated on the current password: a wrong `current_password` surfaces on
 /// that field rather than failing silently. On success the new (hashed)
@@ -215,7 +215,7 @@ pub async fn update_password(req: Request) -> Response {
     redirect!("/profile").into()
 }
 
-/// `DELETE /profile` — password-gated account deletion.
+/// `DELETE /profile` - password-gated account deletion.
 ///
 /// Verify the confirming password (wrong → error on `password`), then log
 /// the session out and delete the user row. Deletion happens last so an

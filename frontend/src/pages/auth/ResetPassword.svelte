@@ -20,7 +20,7 @@
     form.post('/reset-password')
   }
 
-  // A `token` error means the link is consumed or expired — no resubmit with
+  // A `token` error means the link is consumed or expired - no resubmit with
   // this token can ever succeed, so the form is replaced with a CTA to
   // request a fresh link.
   const tokenError = $derived(form.errors.token?.[0] ?? null)

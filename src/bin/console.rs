@@ -1,4 +1,4 @@
-//! nebula console — runtime command dispatch.
+//! nebula console - runtime command dispatch.
 //!
 //! Per-project entry point for `db:seed`, your own `#[command]`s, and
 //! other one-shot CLI tasks. Calls `nebula::bootstrap::register()`
@@ -12,7 +12,7 @@
 //! ./target/debug/console <your-command>
 //! ```
 //!
-//! Tokio flavor is `current_thread` — console commands are one-shot,
+//! Tokio flavor is `current_thread` - console commands are one-shot,
 //! so the multi-threaded worker pool would buy nothing. Bootstrap
 //! runs only when a real subcommand is matched, so `console --help`
 //! and `console --version` work without DATABASE_URL set.
@@ -49,7 +49,7 @@ async fn main() -> ExitCode {
     // dispatch_argv_with_init owns all user-facing stderr (both clap
     // parse errors and handler-returned errors); main is pure
     // Result → ExitCode translation. The bootstrap closure runs only
-    // when clap matches a real registered subcommand — help, version,
+    // when clap matches a real registered subcommand - help, version,
     // and parse-error paths skip it entirely.
     let result = suprnova::console::dispatch_argv_with_init(argv, || async {
         nebula::config::register_all();

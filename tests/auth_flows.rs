@@ -1,8 +1,8 @@
-//! Account-management flow tests for the Nebula starter kit — facade level.
+//! Account-management flow tests for the Nebula starter kit - facade level.
 //!
-//! These exercise the three account flows the kit ships — email verification,
+//! These exercise the three account flows the kit ships - email verification,
 //! password reset (with anti-enumeration), and the profile update / password /
-//! delete surface — end-to-end against a **real** in-memory database (Nebula's
+//! delete surface - end-to-end against a **real** in-memory database (Nebula's
 //! own `Migrator`) with the mail transport **faked** (`Mail::fake()`). No mocks:
 //! the assertions read the persisted `users` row back through the same
 //! `EloquentUserProvider<User>` the kit registers, and the tokens are extracted
@@ -16,14 +16,14 @@
 //! counterpart lives in `tests/http_flows.rs`, which drives the kit's real
 //! router + global middleware stack through `suprnova::handle_request`.
 //!
-//! The HTTP wiring was broken at framework rev `06b9447f` — `group!("/")`
+//! The HTTP wiring was broken at framework rev `06b9447f` - `group!("/")`
 //! registered unmatchable `//login` patterns, and `redirect!("/path")`
 //! resolved literal paths as route *names* (500 in any app with no named
 //! routes). Both are fixed as of `95777465` (canonical `join_paths` prefix
 //! joining; literal-shape dispatch in `redirect!`), pinned framework-side by
 //! `framework/tests/root_group_redirect.rs` and consumer-side by
 //! `tests/http_flows.rs`. Because this suite sits below the router, wiring
-//! defects of that kind cannot fail it — a failure here points at the flow
+//! defects of that kind cannot fail it - a failure here points at the flow
 //! logic itself.
 //!
 //! ## Coverage note
@@ -87,7 +87,7 @@ async fn setup() -> Harness {
         .expect("run Nebula migrations against sqlite::memory:");
     App::singleton(suprnova::DbConnection::from_raw(conn));
 
-    // Auth wiring — mirror `bootstrap::register()` exactly. `AuthConfig::default()`'s
+    // Auth wiring - mirror `bootstrap::register()` exactly. `AuthConfig::default()`'s
     // "web" guard points at the "users" provider.
     App::singleton(AuthManager::new(AuthConfig::default()));
     Auth::register_provider("users", Arc::new(EloquentUserProvider::<User>::new()))
@@ -115,7 +115,7 @@ async fn mark_verified(user: &mut User) {
 
 /// Pull the plaintext token out of the first captured mail whose text body
 /// carries a `token=` link (the text body renders the URL verbatim; the HTML
-/// body HTML-escapes slashes) — the same extraction the framework facade tests
+/// body HTML-escapes slashes) - the same extraction the framework facade tests
 /// use.
 fn token_from_fake(fake: &MailFake) -> String {
     let captured = fake.captured();
@@ -171,7 +171,7 @@ async fn verification_sends_link_consumes_once_and_persists_stamp() {
     // Not yet verified in the DB.
     assert!(!reload("grace@nebula.test").await.is_email_verified());
 
-    // Consume the token — marks the user verified, returns the id.
+    // Consume the token - marks the user verified, returns the id.
     let id = EmailVerification::verify(&token).await.expect("verify");
     assert_eq!(id, user.get_auth_identifier());
     assert!(

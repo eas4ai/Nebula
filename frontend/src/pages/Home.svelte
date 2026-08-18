@@ -13,14 +13,14 @@
 </script>
 
 <svelte:head>
-  <title>Welcome — Nebula</title>
+  <title>Welcome - Nebula</title>
 </svelte:head>
 
 <div
   class="mx-auto flex w-full max-w-2xl flex-col items-center px-4 py-16 text-center sm:py-24"
 >
   <!--
-    The full SUPRNOVA badge (apple-touch-icon is the 180px badge render —
+    The full SUPRNOVA badge (apple-touch-icon is the 180px badge render -
     same artwork as android-chrome-512 at a fraction of the weight). Served
     by the kit's static_files routes at the web root.
   -->

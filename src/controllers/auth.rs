@@ -67,7 +67,7 @@ pub async fn login(req: Request) -> Response {
 
     // `Auth::attempt` verifies the password through the registered user
     // provider, logs the user into the session on success, and issues a
-    // remember-me token when requested — all via the named-guard system
+    // remember-me token when requested - all via the named-guard system
     // wired in bootstrap.rs.
     match Auth::attempt(
         &Credentials::password(&form.email, &form.password),
@@ -88,7 +88,7 @@ pub async fn login(req: Request) -> Response {
 // Registration
 // ============================================================================
 
-/// No per-page props — see [`LoginProps`].
+/// No per-page props - see [`LoginProps`].
 #[derive(InertiaProps)]
 pub struct RegisterProps {}
 
@@ -122,7 +122,7 @@ impl FormRequest for RegisterRequest {
     }
 }
 
-/// Deliver registration validation errors — same split as [`render_login`].
+/// Deliver registration validation errors - same split as [`render_login`].
 async fn render_register(ctx: &InertiaCtx, errors: ValidationErrors) -> Response {
     if ctx.wants_inertia() {
         inertia_response!(ctx, "auth/Register", { "errors": errors_json(&errors) })
@@ -159,7 +159,7 @@ pub async fn register(req: Request) -> Response {
     //
     // This send is best-effort: the account is already created and the session
     // logged in, so a mail failure (e.g. a misconfigured `MAIL_FROM`) must not
-    // 500 registration. We log and continue — the user lands on the verified
+    // 500 registration. We log and continue - the user lands on the verified
     // gate at `/verify-email` and can resend from there.
     let base = format!("{}/verify-email/verify", crate::controllers::app_url());
     if let Err(err) = suprnova::auth_flows::EmailVerification::send_link(user.as_ref(), &base).await

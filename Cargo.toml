@@ -9,7 +9,7 @@ authors = ["eas4ai <shawn@eas4ai.com>"]
 name = "nebula"
 path = "cmd/main.rs"
 
-# Per-project console binary — runtime command dispatch (db:seed,
+# Per-project console binary - runtime command dispatch (db:seed,
 # user-defined `#[command]` async fns, etc.). Same crate, different
 # `fn main` because console commands exit when their handler returns
 # whereas the server binary loops forever.

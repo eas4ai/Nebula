@@ -2,7 +2,7 @@
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
 
-/* Nebula brand — override the sv5ui OKLCH (MD3) tokens. These names are the
+/* Nebula brand - override the sv5ui OKLCH (MD3) tokens. These names are the
    real ones (NOT --primary/--background). Tune values to the Suprnova identity. */
 :root {
   --color-primary: oklch(0.72 0.15 200);            /* neon-cyan */

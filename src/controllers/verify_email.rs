@@ -3,11 +3,11 @@
 //! Three handlers that sit *behind* `AuthMiddleware` (an authenticated but
 //! possibly-unverified user):
 //!
-//! - `GET  /verify-email` — render the "please verify" notice. Already-verified
+//! - `GET  /verify-email` - render the "please verify" notice. Already-verified
 //!   users are bounced straight to `/dashboard`.
-//! - `POST /email/verification-notification` — resend a fresh verification link
+//! - `POST /email/verification-notification` - resend a fresh verification link
 //!   to the current user (no-op if already verified).
-//! - `GET  /verify-email/verify?token=…` — consume the token via the
+//! - `GET  /verify-email/verify?token=…` - consume the token via the
 //!   `EmailVerification` facade and 302 to `/dashboard`; an invalid/expired
 //!   token re-renders the notice with a `status` flag the page can surface.
 //!
@@ -37,7 +37,7 @@ pub struct VerifyEmailProps {
     pub status: Option<String>,
 }
 
-/// `GET /verify-email` — render the verification notice.
+/// `GET /verify-email` - render the verification notice.
 ///
 /// An already-verified user has nothing to do here, so skip to the dashboard.
 #[handler]
@@ -50,7 +50,7 @@ pub async fn show_notice(req: Request) -> Response {
     inertia_response!(&req, "auth/VerifyEmail", VerifyEmailProps { status: None })
 }
 
-/// `POST /email/verification-notification` — resend the verification link.
+/// `POST /email/verification-notification` - resend the verification link.
 ///
 /// Mails a fresh token to the currently authenticated user. Already-verified
 /// users are a silent no-op (still a 302 back to the notice). The route is
@@ -67,7 +67,7 @@ pub async fn resend(_req: Request) -> Response {
     redirect!("/verify-email").into()
 }
 
-/// `GET /verify-email/verify?token=…` — consume a verification token.
+/// `GET /verify-email/verify?token=…` - consume a verification token.
 ///
 /// Delegates the mutation (and the `EmailVerified` event) to
 /// `EmailVerification::verify`. On success, 302 to `/dashboard`. A missing,

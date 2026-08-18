@@ -6,7 +6,7 @@
 //! manifest request the favicon set at the web root (`/favicon.ico`,
 //! `/site.webmanifest`, ...), so the kit serves that small whitelist itself
 //! from `public/` through explicit routes. Dev (`suprnova serve`) and prod
-//! (the release binary) hit the exact same handler — the page origin is the
+//! (the release binary) hit the exact same handler - the page origin is the
 //! Rust server in both modes, with Vite only supplying JS/CSS via absolute
 //! dev-server URLs.
 
@@ -32,7 +32,7 @@ fn content_type(file: &str) -> Option<&'static str> {
 
 /// Serve one whitelisted file from `public/` with its content type and a
 /// day-long cache. Routes register this handler per exact filename, so the
-/// request path is always a bare `/name` — the whitelist check is the
+/// request path is always a bare `/name` - the whitelist check is the
 /// belt-and-braces guarantee that nothing else can be read.
 #[handler]
 pub async fn serve(req: Request) -> Response {

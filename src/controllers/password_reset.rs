@@ -2,14 +2,14 @@
 //!
 //! The full forgot-password / reset-password flow, all on guest-only routes:
 //!
-//! - `GET  /forgot-password` — render the "request a reset link" form.
-//! - `POST /forgot-password` — mail a reset link. Anti-enumeration: the
+//! - `GET  /forgot-password` - render the "request a reset link" form.
+//! - `POST /forgot-password` - mail a reset link. Anti-enumeration: the
 //!   response is identical whether or not the address exists, so a caller can't
 //!   probe which emails are registered. The `PasswordReset::send_link` facade
 //!   only mails when the address resolves, but always returns `Ok`.
-//! - `GET  /reset-password?token=…` — render the new-password form, carrying the
+//! - `GET  /reset-password?token=…` - render the new-password form, carrying the
 //!   token through as a hidden field.
-//! - `POST /reset-password` — consume the token and set the new password via
+//! - `POST /reset-password` - consume the token and set the new password via
 //!   `PasswordReset::complete`. An invalid or expired token re-renders the form
 //!   with a `token` validation error rather than dumping a raw failure.
 //!
@@ -79,13 +79,13 @@ impl FormRequest for ResetRequest {
     }
 }
 
-/// `GET /forgot-password` — render the "request a reset link" form.
+/// `GET /forgot-password` - render the "request a reset link" form.
 #[handler]
 pub async fn show_request(req: Request) -> Response {
     inertia_response!(&req, "auth/ForgotPassword", ForgotPasswordProps {})
 }
 
-/// `POST /forgot-password` — mail a reset link.
+/// `POST /forgot-password` - mail a reset link.
 ///
 /// Anti-enumeration: this always succeeds the same way regardless of whether
 /// the address is registered. `send_link` mails only when the address resolves
@@ -111,7 +111,7 @@ pub async fn send_link(req: Request) -> Response {
     redirect!("/forgot-password").into()
 }
 
-/// `GET /reset-password?token=…` — render the new-password form.
+/// `GET /reset-password?token=…` - render the new-password form.
 ///
 /// The token is carried through to the page so the subsequent POST can present
 /// it back. A missing token renders an empty field; the POST then fails the
@@ -136,7 +136,7 @@ async fn render_reset(ctx: &InertiaCtx, token: &str, errors: ValidationErrors) -
     }
 }
 
-/// `POST /reset-password` — consume the token and set the new password.
+/// `POST /reset-password` - consume the token and set the new password.
 ///
 /// On success, 302 to `/login` so the user signs in with the new credentials,
 /// flashing a success message that the login landing surfaces via the page

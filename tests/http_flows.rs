@@ -1,10 +1,10 @@
-//! Account-management flow tests for the Nebula starter kit — request path.
+//! Account-management flow tests for the Nebula starter kit - request path.
 //!
 //! These drive the kit's **real** HTTP surface: `nebula::routes::register()`
 //! (the actual `routes!` table, root-prefix `group!("/")` groups, guest /
 //! auth / verified middleware) plus the same global middleware stack
 //! `bootstrap::register()` installs (logging → session → CSRF → include),
-//! served through `suprnova::handle_request` — the framework's in-process
+//! served through `suprnova::handle_request` - the framework's in-process
 //! request surface. Because `hyper::body::Incoming` cannot be built
 //! synthetically, requests travel over an ephemeral loopback socket whose
 //! service fn is `handle_request`, exactly like the framework's own
@@ -23,7 +23,7 @@
 //! (`group!("/")` registered unmatchable `//login` patterns; `redirect!`
 //! resolved literal paths as route names). Both are fixed upstream as of
 //! `95777465` (canonical `join_paths` for group prefixes; literal-shape
-//! dispatch in `redirect!`) — this suite is the consumer-side pin on those
+//! dispatch in `redirect!`) - this suite is the consumer-side pin on those
 //! fixes.
 //!
 //! ## Serial execution
@@ -82,7 +82,7 @@ impl Drop for Harness {
 /// remember_tokens, auth_flow_tokens), the `EloquentUserProvider::<User>`
 /// registered as the active "users" provider (mirroring
 /// `bootstrap::register()`), and the load-bearing `MAIL_FROM` / `APP_URL` env
-/// set. Bindings go into the **global** container — the spawned server tasks
+/// set. Bindings go into the **global** container - the spawned server tasks
 /// resolve `DB::connection()` / `AuthManager` from there.
 async fn setup() -> Harness {
     let lock = common::TEST_LOCK.lock().await;
@@ -93,7 +93,7 @@ async fn setup() -> Harness {
         std::env::set_var("APP_URL", "http://nebula.test");
     }
 
-    // The session middleware fails closed (500) without an encryption key —
+    // The session middleware fails closed (500) without an encryption key -
     // `Server::from_config` installs one at boot; this harness drives
     // `handle_request` directly, so install a process-wide test key here.
     // The ring is a sealed OnceCell: the first test wins, later calls no-op.
@@ -113,7 +113,7 @@ async fn setup() -> Harness {
 
     // Mirror bootstrap's `App::register_inertia_shared(Arc::new(AuthShare))`
     // so authenticated page renders carry the shared `auth.user` prop here
-    // too. Re-registering across tests is fine — the provider slot is a
+    // too. Re-registering across tests is fine - the provider slot is a
     // replace-on-write.
     App::register_inertia_shared(Arc::new(nebula::bootstrap::AuthShare));
 
@@ -124,8 +124,8 @@ async fn setup() -> Harness {
 }
 
 impl Harness {
-    /// Spawn the kit's real app — `nebula::routes::register()` behind the same
-    /// global middleware stack `bootstrap::register()` installs — on an
+    /// Spawn the kit's real app - `nebula::routes::register()` behind the same
+    /// global middleware stack `bootstrap::register()` installs - on an
     /// ephemeral loopback listener whose service fn is
     /// `suprnova::handle_request`. The accept loop's abort handle is stored on
     /// the harness and aborted on drop, so the server's lifetime is the test's.
@@ -140,7 +140,7 @@ impl Harness {
                 // Mirrors bootstrap's `Inertia::install`: upgrade Inertia
                 // PUT/PATCH/DELETE 302s to 303 so browsers don't replay the
                 // verb against the redirect target. (The version middleware
-                // is omitted — these tests never send `X-Inertia-Version`.)
+                // is omitted - these tests never send `X-Inertia-Version`.)
                 .append(Inertia303Middleware::new()),
         );
 
@@ -196,7 +196,7 @@ impl Resp {
 /// A minimal browser: cookie jar + CSRF echo. Every request opens a fresh
 /// HTTP/1.1 connection (matching how the accept loop serves), carries the
 /// jar as `Cookie`, and echoes the `XSRF-TOKEN` cookie back as
-/// `X-XSRF-TOKEN` on state-changing verbs — exactly what the Inertia client
+/// `X-XSRF-TOKEN` on state-changing verbs - exactly what the Inertia client
 /// does in production.
 struct Client {
     addr: SocketAddr,
@@ -220,7 +220,7 @@ impl Client {
     }
 
     /// Same as [`post_json`](Self::post_json) but flagged as an Inertia
-    /// visit (`X-Inertia: true`) — what `useForm().post` sends from the
+    /// visit (`X-Inertia: true`) - what `useForm().post` sends from the
     /// browser. Validation failures answer these with a page re-render
     /// carrying an `errors` prop instead of the 422 envelope.
     async fn inertia_post_json(&mut self, path: &str, body: Value) -> Resp {
@@ -235,7 +235,7 @@ impl Client {
         self.request("PUT", path, Some(body), false).await
     }
 
-    /// Inertia-flagged PUT — see [`inertia_post_json`](Self::inertia_post_json).
+    /// Inertia-flagged PUT - see [`inertia_post_json`](Self::inertia_post_json).
     async fn inertia_put_json(&mut self, path: &str, body: Value) -> Resp {
         self.request("PUT", path, Some(body), true).await
     }
@@ -386,12 +386,12 @@ async fn register_then_verify_email_over_http() {
     let addr = harness.spawn_app().await;
     let mut client = Client::new(addr);
 
-    // Acquire a session + CSRF cookie through the guest-gated register page —
+    // Acquire a session + CSRF cookie through the guest-gated register page -
     // this also proves the root-prefix `group!("/")` routes match over HTTP.
     let resp = client.get("/register").await;
     assert_eq!(resp.status, 200, "GET /register must render: {}", resp.body);
 
-    // Register. The success path is `redirect!("/dashboard")` — the literal
+    // Register. The success path is `redirect!("/dashboard")` - the literal
     // Location pins the framework's literal-redirect dispatch fix.
     let fake = Mail::fake();
     let resp = client
@@ -422,7 +422,7 @@ async fn register_then_verify_email_over_http() {
     let resp = client.get("/verify-email").await;
     assert_eq!(resp.status, 200, "the verify notice must render");
 
-    // Consume the emailed token (public route — the token is the proof).
+    // Consume the emailed token (public route - the token is the proof).
     let resp = client
         .get(&format!("/verify-email/verify?token={token}"))
         .await;
@@ -747,7 +747,7 @@ async fn login_success_redirects_to_literal_dashboard() {
     let resp = client.get("/login").await;
     assert_eq!(resp.status, 200);
 
-    // The login controller's success arm is `redirect!("/dashboard")` — a
+    // The login controller's success arm is `redirect!("/dashboard")` - a
     // string literal with a leading `/`. At framework rev 06b9447f this
     // resolved as a route *name* and 500'd (`Route '/dashboard' not found`);
     // since 95777465 the macro dispatches literal shapes to `Redirect::to`.
@@ -837,7 +837,7 @@ async fn inertia_submissions_render_errors_and_303_redirects() {
     assert_eq!(resp.location(), "/dashboard");
 
     // The shared `auth.user` prop (AuthShare in bootstrap.rs) rides every
-    // page render once authenticated — it is what the layout's user menu
+    // page render once authenticated - it is what the layout's user menu
     // and Dashboard nav link key off.
     let resp = client.get("/dashboard").await;
     assert_eq!(resp.status, 200);
@@ -868,7 +868,7 @@ async fn inertia_submissions_render_errors_and_303_redirects() {
     assert_eq!(resp.location(), "/profile");
 
     // And a failing Inertia PUT re-renders the Profile page with the field
-    // error — wrong current password pins `current_password`.
+    // error - wrong current password pins `current_password`.
     let resp = client
         .inertia_put_json(
             "/profile/password",
@@ -901,7 +901,7 @@ async fn inertia_submissions_render_errors_and_303_redirects() {
 /// `public/` branding whitelist through explicit routes
 /// (`controllers::static_files::serve`). This drives those routes through the
 /// real router + global middleware stack, exactly as a browser requests them
-/// — and since dev and prod are the same Rust server (Vite only supplies
+/// - and since dev and prod are the same Rust server (Vite only supplies
 /// JS/CSS via absolute dev-server URLs), one pass covers both modes.
 #[tokio::test]
 async fn branding_statics_resolve_at_web_root() {

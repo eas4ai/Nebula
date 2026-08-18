@@ -6,7 +6,7 @@ import Layout from './lib/Layout.svelte'
 // CSRF: no manual wiring needed. Inertia v3's HTTP client reads the live
 // `XSRF-TOKEN` cookie (set by Suprnova's CsrfMiddleware, rotated on
 // login/logout) and echoes it as `X-XSRF-TOKEN` on every request itself.
-// Do NOT add a `router.on('before')` hook that sets the header too —
+// Do NOT add a `router.on('before')` hook that sets the header too -
 // XMLHttpRequest *combines* duplicate headers into "token, token", which
 // the server rejects as a mismatch (419) on every form submit.
 

@@ -93,7 +93,7 @@ impl Authenticatable for User {
     }
 
     /// Expose the stored hash so the built-in `EloquentUserProvider`
-    /// can validate credentials — without this override the trait
+    /// can validate credentials - without this override the trait
     /// default returns `None` and `Auth::attempt` rejects EVERY
     /// password, so `POST /login` can never succeed.
     fn get_auth_password(&self) -> Option<&str> {

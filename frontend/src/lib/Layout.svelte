@@ -53,7 +53,7 @@
   <!--
     `use-credentials` matters: browsers fetch web-app manifests WITHOUT
     cookies by default, and every Suprnova request without a session cookie
-    mints a fresh session whose Set-Cookie clobbers the real one — breaking
+    mints a fresh session whose Set-Cookie clobbers the real one - breaking
     the CSRF token pairing on the user's very first form submit.
   -->
   <link rel="manifest" href="/site.webmanifest" crossorigin="use-credentials" />

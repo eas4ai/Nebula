@@ -21,7 +21,7 @@ pub(crate) fn app_url() -> String {
 //
 // `FormRequest` extraction surfaces validation failures as the Laravel-style
 // 422 `{ message, errors }` envelope. That is right for API clients, but the
-// Inertia client cannot render a plain-JSON error response — it shows the
+// Inertia client cannot render a plain-JSON error response - it shows the
 // raw payload in its error modal instead of putting messages on the fields.
 // The browser-facing controllers therefore validate through `inertia_form`
 // and, on failure of an `X-Inertia` submission, re-render the originating
@@ -79,7 +79,7 @@ pub(crate) enum FormFailure<T> {
     /// the password-reset token), plus the per-field error bag.
     Invalid(Box<T>, ValidationErrors),
     /// Authorization / parse / transport failure, already converted to the
-    /// framework's standard error response — return it as `Err(*resp)`.
+    /// framework's standard error response - return it as `Err(*resp)`.
     Response(Box<HttpResponse>),
 }
 
@@ -118,7 +118,7 @@ pub(crate) async fn inertia_form<T: FormRequest>(req: Request) -> Result<T, Form
 
 /// Flatten a [`ValidationErrors`] bag into the `{ field: [messages] }` JSON
 /// the Inertia client merges into `useForm().errors`. Messages render
-/// through `messages_for`, so keyed messages become locale-aware text —
+/// through `messages_for`, so keyed messages become locale-aware text -
 /// the same rendering the framework's own 422 envelope applies.
 pub(crate) fn errors_json(errors: &ValidationErrors) -> serde_json::Value {
     let map: serde_json::Map<String, serde_json::Value> = errors

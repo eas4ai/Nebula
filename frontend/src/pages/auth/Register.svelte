@@ -24,7 +24,7 @@
         Create your account
       </h1>
       <p class="mt-1 text-center text-sm text-on-surface-variant">
-        Join Nebula — it only takes a minute.
+        Join Nebula - it only takes a minute.
       </p>
     {/snippet}
 
