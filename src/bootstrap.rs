@@ -51,15 +51,16 @@ impl InertiaSharedData for AuthShare {
     async fn share(
         &self,
         _req: &dyn InertiaRequestExt,
+        _component: &str,
     ) -> Result<IndexMap<String, Prop>, FrameworkError> {
         let user = Auth::user_as::<User>().await?;
         let mut out = IndexMap::new();
         out.insert(
             "auth".to_string(),
-            Prop::Eager(serde_json::json!({
+            Prop::eager(serde_json::json!({
                 "user": user.map(|u| serde_json::json!({
                     "id": u.id,
-                    "name": u.name,
+                    "name": u.name.unwrap_or_else(|| "Account".to_string()),
                     "email": u.email,
                 })),
             })),
@@ -81,6 +82,18 @@ pub const INERTIA_VERSION: &str = "1.0";
 pub async fn register() {
     // Initialize database connection
     DB::init().await.expect("Failed to connect to database");
+    let db = DB::connection().expect("DB not initialized");
+    let magnetar = suprnova::MagnetarConfig::from_sea_orm(db.inner().clone()).passkey_config(
+        suprnova::PasskeyConfig {
+            rp_id: std::env::var("PASSKEY_RP_ID").unwrap_or_else(|_| "localhost".to_string()),
+            rp_origin: std::env::var("PASSKEY_RP_ORIGIN")
+                .unwrap_or_else(|_| "http://localhost".to_string()),
+        },
+    );
+    suprnova::init_magnetar(magnetar)
+        .await
+        .expect("Failed to initialize Magnetar");
+    suprnova::rate_limit::bootstrap_default().await;
 
     // Global middleware (runs on every request in registration order)
     global_middleware!(middleware::LoggingMiddleware);

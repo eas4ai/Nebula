@@ -34,7 +34,7 @@ pub async fn index(req: Request) -> Response {
         DashboardProps {
             user: UserInfo {
                 id: user.id,
-                name: user.name,
+                name: user.name.unwrap_or_else(|| "Account".to_owned()),
                 email: user.email,
             }
         }

@@ -5,32 +5,68 @@
 //! `ActiveModel` in an inner `user` module and gives `User` the query surface
 //! (`User::query()`, `User::find()`, the `Model::create` mass-assignment entry
 //! point, `save`, timestamps). `Authenticatable` is implemented on the struct
-//! so the auth stack (session middleware, user providers, `Auth::user()`)
-//! resolves users without touching SeaORM directly.
+//! so the auth stack (session middleware, user providers, `Auth::user()`) can
+//! resolve users without touching SeaORM directly.
 
 use std::any::Any;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset, Utc};
 use suprnova::{
-    Authenticatable, CanResetPassword, FrameworkError, MustVerifyEmail, attrs, hashing, model,
+    Authenticatable, CanResetPassword, Cast, FrameworkError, MustVerifyEmail, attrs, hashing, model,
 };
 
+struct NativeUtcDateTime;
+
+impl Cast for NativeUtcDateTime {
+    type Runtime = DateTime<Utc>;
+    type Storage = DateTime<FixedOffset>;
+
+    fn to_storage(value: &Self::Runtime) -> Result<Self::Storage, FrameworkError> {
+        Ok(value.fixed_offset())
+    }
+
+    fn from_storage(stored: &Self::Storage) -> Result<Self::Runtime, FrameworkError> {
+        Ok(stored.with_timezone(&Utc))
+    }
+}
+
+struct OptionalNativeUtcDateTime;
+
+impl Cast for OptionalNativeUtcDateTime {
+    type Runtime = Option<DateTime<Utc>>;
+    type Storage = Option<DateTime<FixedOffset>>;
+
+    fn to_storage(value: &Self::Runtime) -> Result<Self::Storage, FrameworkError> {
+        Ok(value.as_ref().map(DateTime::fixed_offset))
+    }
+
+    fn from_storage(stored: &Self::Storage) -> Result<Self::Runtime, FrameworkError> {
+        Ok(stored.as_ref().map(|value| value.with_timezone(&Utc)))
+    }
+}
+
 #[model(
-    table = "users",
-    fillable = ["name", "email", "password"],
-    hidden = ["password", "remember_token"],
+    table = "app_users",
+    fillable = ["name", "email", "password_hash"],
+    hidden = ["password_hash", "remember_token", "locked_at", "auth_epoch", "session_version"],
+    casts = {
+        created_at = NativeUtcDateTime,
+        updated_at = NativeUtcDateTime,
+        email_verified_at = OptionalNativeUtcDateTime,
+        locked_at = OptionalNativeUtcDateTime
+    },
     timestamps,
 )]
 pub struct User {
     pub id: i64,
-    pub name: String,
+    pub name: Option<String>,
     pub email: String,
-    pub password: String,
-    // Nullable verification timestamp powering the email-verification flow.
-    // The model macro auto-injects `AsOptionalDateTime` for
-    // `Option<DateTime<Utc>>` fields, so no explicit cast entry is needed.
-    pub email_verified_at: Option<DateTime<Utc>>,
+    pub password_hash: Option<String>,
     pub remember_token: Option<String>,
+    pub email_verified_at: Option<DateTime<Utc>>,
+    pub locked_at: Option<DateTime<Utc>>,
+    pub auth_epoch: i64,
+    pub session_version: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -51,7 +87,14 @@ impl User {
 
     /// Verify a plaintext password against this user's stored hash.
     pub fn verify_password(&self, password: &str) -> Result<bool, FrameworkError> {
-        hashing::verify(password, &self.password)
+        match self
+            .password_hash
+            .as_deref()
+            .filter(|hash| !hash.is_empty())
+        {
+            Some(hash) => hashing::verify(password, hash),
+            None => Ok(false),
+        }
     }
 
     /// Create a new user, hashing the password before insert. Values are
@@ -65,21 +108,49 @@ impl User {
         let email: String = email.into();
         let hashed = hashing::hash(password)?;
         <Self as suprnova::eloquent::Model>::create(attrs! {
-            name: name,
+            name: Some(name),
             email: email,
-            password: hashed,
+            password_hash: Some(hashed),
         })
         .await
     }
 
-    /// Set (or clear) the remember-me token and persist it. `remember_token`
-    /// is deliberately outside `fillable` (it is never set from request
-    /// input), so this writes the whole row via `save` rather than a
-    /// mass-assignment update.
+    /// Persist only the profile-owned user columns, leaving authentication
+    /// state (`password_hash`, epochs, lockout, and remember credentials)
+    /// untouched even if this model snapshot is stale.
+    pub async fn update_profile(
+        self,
+        name: String,
+        email: String,
+        email_verified_at: Option<DateTime<Utc>>,
+    ) -> Result<Self, FrameworkError> {
+        suprnova::unguarded(|| {
+            <Self as suprnova::eloquent::Model>::update(
+                self,
+                attrs! {
+                    name: Some(name),
+                    email: email,
+                    email_verified_at: email_verified_at,
+                },
+            )
+        })
+        .await
+    }
+
+    /// Persist only the password hash without writing stale epoch or lockout state.
+    pub async fn update_password_hash(self, hash: String) -> Result<Self, FrameworkError> {
+        <Self as suprnova::eloquent::Model>::update(self, attrs! { password_hash: Some(hash) })
+            .await
+    }
+
+    /// Persist only the legacy framework remember-token column.
     pub async fn update_remember_token(&self, token: Option<String>) -> Result<(), FrameworkError> {
-        let mut updated = self.clone();
-        updated.remember_token = token;
-        <Self as suprnova::eloquent::Model>::save(&updated).await
+        let user = self.clone();
+        suprnova::unguarded(|| {
+            <Self as suprnova::eloquent::Model>::update(user, attrs! { remember_token: token })
+        })
+        .await
+        .map(|_| ())
     }
 }
 
@@ -97,7 +168,9 @@ impl Authenticatable for User {
     /// default returns `None` and `Auth::attempt` rejects EVERY
     /// password, so `POST /login` can never succeed.
     fn get_auth_password(&self) -> Option<&str> {
-        Some(&self.password)
+        self.password_hash
+            .as_deref()
+            .filter(|hash| !hash.is_empty())
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -128,7 +201,7 @@ impl MustVerifyEmail for User {
     }
 
     fn name(&self) -> Option<&str> {
-        Some(&self.name)
+        self.name.as_deref().filter(|name| !name.is_empty())
     }
 }
 
@@ -140,6 +213,6 @@ impl CanResetPassword for User {
     }
 
     fn set_password_hash(&mut self, hash: &str) {
-        self.password = hash.to_string();
+        self.password_hash = Some(hash.to_string());
     }
 }

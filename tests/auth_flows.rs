@@ -4,7 +4,7 @@
 //! password reset (with anti-enumeration), and the profile update / password /
 //! delete surface - end-to-end against a **real** in-memory database (Nebula's
 //! own `Migrator`) with the mail transport **faked** (`Mail::fake()`). No mocks:
-//! the assertions read the persisted `users` row back through the same
+//! the assertions read the persisted `app_users` row back through the same
 //! `EloquentUserProvider<User>` the kit registers, and the tokens are extracted
 //! from the captured mail bodies.
 //!
@@ -44,16 +44,14 @@
 mod common;
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use chrono::Utc;
+use sea_orm::{ConnectionTrait, Statement};
 use sea_orm_migration::MigratorTrait;
 
 use suprnova::auth::AuthConfig;
 use suprnova::auth_flows::{EmailVerification, PasswordReset};
 use suprnova::mail::{Mail, MailFake};
-use suprnova::session::driver::database::DatabaseSessionDriver;
-use suprnova::session::{SessionData, SessionStore};
 use suprnova::{App, Auth, AuthManager, Authenticatable, EloquentUserProvider, MustVerifyEmail};
 
 use nebula::migrations::Migrator;
@@ -63,6 +61,7 @@ use nebula::models::user::User;
 /// duration of the test so the provider + facades resolve `DB::connection()`.
 struct Harness {
     _lock: tokio::sync::MutexGuard<'static, ()>,
+    mail: MailFake,
 }
 
 /// Fresh in-memory DB with Nebula's full migration set, the
@@ -78,6 +77,8 @@ async fn setup() -> Harness {
         std::env::set_var("MAIL_FROM", "test@nebula.test");
         std::env::set_var("APP_URL", "http://nebula.test");
     }
+    let mail = Mail::fake();
+    suprnova::Crypt::init(suprnova::EncryptionKey::generate());
 
     let conn = sea_orm::Database::connect("sqlite::memory:")
         .await
@@ -86,6 +87,18 @@ async fn setup() -> Harness {
         .await
         .expect("run Nebula migrations against sqlite::memory:");
     App::singleton(suprnova::DbConnection::from_raw(conn));
+    let db = suprnova::DB::connection().expect("DB not initialized");
+    let magnetar = suprnova::MagnetarConfig::from_sea_orm(db.inner().clone()).passkey_config(
+        suprnova::PasskeyConfig {
+            rp_id: std::env::var("PASSKEY_RP_ID").unwrap_or_else(|_| "localhost".to_string()),
+            rp_origin: std::env::var("PASSKEY_RP_ORIGIN")
+                .unwrap_or_else(|_| "http://localhost".to_string()),
+        },
+    );
+    suprnova::init_magnetar(magnetar)
+        .await
+        .expect("Failed to initialize Magnetar");
+    suprnova::rate_limit::bootstrap_default().await;
 
     // Auth wiring - mirror `bootstrap::register()` exactly. `AuthConfig::default()`'s
     // "web" guard points at the "users" provider.
@@ -93,7 +106,23 @@ async fn setup() -> Harness {
     Auth::register_provider("users", Arc::new(EloquentUserProvider::<User>::new()))
         .expect("register users provider");
 
-    Harness { _lock: lock }
+    Harness { _lock: lock, mail }
+}
+
+async fn run_in_request<F, T>(fut: F) -> T
+where
+    F: Future<Output = T>,
+{
+    let session_slot = suprnova::session::new_session_slot_for_test();
+    let pending_slot = suprnova::session::new_pending_cookies_slot_for_test();
+    suprnova::session::session_scope_for_test(
+        session_slot,
+        suprnova::session::pending_cookies_scope_for_test(
+            pending_slot,
+            suprnova::auth::request_state::request_state_scope_for_test(fut),
+        ),
+    )
+    .await
 }
 
 /// Reload a user from the DB by email via the same model surface the kit uses.
@@ -148,7 +177,8 @@ fn token_from_fake(fake: &MailFake) -> String {
 
 #[tokio::test]
 async fn verification_sends_link_consumes_once_and_persists_stamp() {
-    let _h = setup().await;
+    let h = setup().await;
+    let fake = &h.mail;
 
     // A freshly-registered, unverified user (created via the kit's own helper).
     let user = User::create("Grace Hopper", "grace@nebula.test", "supersecret")
@@ -160,20 +190,33 @@ async fn verification_sends_link_consumes_once_and_persists_stamp() {
     );
 
     // Send the verification link (the base the kit appends `?token=` to).
-    let fake = Mail::fake();
+    let baseline = fake.count();
     EmailVerification::send_link(&user, "http://nebula.test/verify-email/verify")
         .await
         .expect("send verification link");
     fake.assert_sent_to("grace@nebula.test");
-    assert_eq!(fake.count(), 1, "exactly one verification mail");
+    assert_eq!(fake.count(), baseline + 1, "exactly one verification mail");
     let token = token_from_fake(&fake);
 
     // Not yet verified in the DB.
     assert!(!reload("grace@nebula.test").await.is_email_verified());
 
-    // Consume the token - marks the user verified, returns the id.
-    let id = EmailVerification::verify(&token).await.expect("verify");
-    assert_eq!(id, user.get_auth_identifier());
+    // Consume the token inside a request-scoped authenticated session - the
+    // framework requires the caller to be the token owner.
+    let user_id = user.get_auth_identifier();
+    let token_for_scope = token.clone();
+    run_in_request(async move {
+        Auth::password()
+            .authenticate("grace@nebula.test", "supersecret", None, None)
+            .await
+            .expect("authenticate matching user into request");
+        let id = EmailVerification::verify(&token_for_scope)
+            .await
+            .expect("verify");
+        assert_eq!(id, user_id);
+    })
+    .await;
+
     assert!(
         reload("grace@nebula.test").await.is_email_verified(),
         "verify must persist email_verified_at through the provider"
@@ -195,40 +238,41 @@ async fn verification_sends_link_consumes_once_and_persists_stamp() {
 
 #[tokio::test]
 async fn resend_sends_a_fresh_link_and_is_silent_for_unknown() {
-    let _h = setup().await;
+    let h = setup().await;
+    let fake = &h.mail;
     User::create("Ada Lovelace", "ada@nebula.test", "oldpass1!")
         .await
         .expect("create user");
 
     // Known, unverified email → a fresh link is mailed.
-    {
-        let fake = Mail::fake();
-        EmailVerification::resend("ada@nebula.test", "http://nebula.test/verify-email/verify")
-            .await
-            .expect("resend known");
-        assert_eq!(fake.count(), 1, "known email must trigger a fresh link");
-        fake.assert_sent_to("ada@nebula.test");
-        assert!(
-            !token_from_fake(&fake).is_empty(),
-            "the resent link carries a token"
-        );
-    }
+    let known_before = fake.count();
+    EmailVerification::resend("ada@nebula.test", "http://nebula.test/verify-email/verify")
+        .await
+        .expect("resend known");
+    assert_eq!(
+        fake.count(),
+        known_before + 1,
+        "known email must trigger a fresh link"
+    );
+    fake.assert_sent_to("ada@nebula.test");
+    assert!(
+        !token_from_fake(&fake).is_empty(),
+        "the resent link carries a token"
+    );
 
     // Unknown email → anti-enumeration: nothing sent, still Ok.
-    {
-        let fake = Mail::fake();
-        EmailVerification::resend(
-            "nobody@nebula.test",
-            "http://nebula.test/verify-email/verify",
-        )
-        .await
-        .expect("resend unknown returns Ok (no leak)");
-        assert_eq!(
-            fake.count(),
-            0,
-            "unknown email must send nothing (anti-enumeration)"
-        );
-    }
+    let unknown_before = fake.count();
+    EmailVerification::resend(
+        "nobody@nebula.test",
+        "http://nebula.test/verify-email/verify",
+    )
+    .await
+    .expect("resend unknown returns Ok (no leak)");
+    assert_eq!(
+        fake.count(),
+        unknown_before,
+        "unknown email must send nothing (anti-enumeration)"
+    );
 }
 
 // ============================================================================
@@ -242,7 +286,8 @@ async fn resend_sends_a_fresh_link_and_is_silent_for_unknown() {
 
 #[tokio::test]
 async fn password_reset_rotates_password_revokes_sessions_and_is_anti_enumerating() {
-    let _h = setup().await;
+    let h = setup().await;
+    let fake = &h.mail;
 
     let mut ada = User::create("Ada Reset", "ada@x.com", "oldpass1!")
         .await
@@ -250,47 +295,55 @@ async fn password_reset_rotates_password_revokes_sessions_and_is_anti_enumeratin
     mark_verified(&mut ada).await;
     let id = ada.get_auth_identifier();
 
-    // Seed a live session row for Ada so the reset's revocation has a real row
-    // to delete (the kit's `PasswordReset::complete` revokes sessions on reset).
-    let session_driver = DatabaseSessionDriver::new(Duration::from_secs(3600));
-    let mut sess = SessionData::new("ada-sess-1".into(), "ada-csrf".into());
-    sess.user_id = Some(id.clone());
-    session_driver.write(&sess).await.expect("seed session");
-    assert!(
-        session_driver
-            .read("ada-sess-1")
-            .await
-            .expect("read seeded session")
-            .is_some(),
-        "the seeded session must exist before the reset"
-    );
+    // Seed a live Magnetar session so the reset completion's atomic credential
+    // rotation has a persisted session to revoke.
+    let db = suprnova::DB::connection().expect("DB initialized");
+    db.inner()
+        .execute_unprepared(&format!(
+            "INSERT INTO auth_sessions \
+             (id, user_id, auth_epoch, token_digest, token_hash, user_agent, ip_address, expires_at, revoked_at) \
+             VALUES ('ada-auth-session-1', {}, 0, '{}', NULL, NULL, NULL, '2099-01-01T00:00:00Z', NULL)",
+            ada.id,
+            "a".repeat(64),
+        ))
+        .await
+        .expect("seed Magnetar session");
 
     // Known email → a reset mail is sent.
-    let fake = Mail::fake();
+    let known_before = fake.count();
     PasswordReset::send_link("ada@x.com", "http://nebula.test/reset-password")
         .await
         .expect("send_link");
+    assert_eq!(
+        fake.count(),
+        known_before + 1,
+        "known email must trigger a reset mail"
+    );
     fake.assert_sent_to("ada@x.com");
     let token = token_from_fake(&fake);
 
     // Unknown email → anti-enumeration: nothing sent, still Ok.
-    {
-        let fake2 = Mail::fake();
-        PasswordReset::send_link("nobody@x.com", "http://nebula.test/reset-password")
-            .await
-            .expect("send_link unknown returns Ok (no leak)");
-        assert_eq!(
-            fake2.count(),
-            0,
-            "unknown email must send nothing (anti-enumeration)"
-        );
-    }
+    let unknown_before = fake.count();
+    PasswordReset::send_link("nobody@x.com", "http://nebula.test/reset-password")
+        .await
+        .expect("send_link unknown returns Ok (no leak)");
+    assert_eq!(
+        fake.count(),
+        unknown_before,
+        "unknown email must send nothing (anti-enumeration)"
+    );
 
-    // Complete the reset → rotates the password, returns the id.
-    let returned = PasswordReset::complete(&token, "newpass1!")
+    // Complete the reset. Magnetar rotates the password and revokes active
+    // sessions in one commit.
+    let outcome = PasswordReset::complete_with_outcome(&token, "newpass1!")
         .await
         .expect("complete");
-    assert_eq!(returned, id);
+    assert_eq!(outcome.user_id, id);
+    assert_eq!(
+        outcome.sessions_revoked.expect("session revocation"),
+        1,
+        "the reset must revoke the seeded Magnetar session"
+    );
 
     // New password verifies; old one no longer does.
     let ada = reload("ada@x.com").await;
@@ -303,21 +356,65 @@ async fn password_reset_rotates_password_revokes_sessions_and_is_anti_enumeratin
         "the old password must no longer verify"
     );
 
-    // The live session was revoked.
-    assert!(
-        session_driver
-            .read("ada-sess-1")
-            .await
-            .expect("read session post-reset")
-            .is_none(),
-        "the user's session must be revoked after a completed reset"
-    );
+    // The persisted session row is tombstoned.
+    let row = db
+        .inner()
+        .query_one_raw(Statement::from_string(
+            sea_orm::DatabaseBackend::Sqlite,
+            "SELECT COUNT(*) AS revoked FROM auth_sessions \
+             WHERE id = 'ada-auth-session-1' AND revoked_at IS NOT NULL",
+        ))
+        .await
+        .expect("query revoked session")
+        .expect("revocation count row");
+    let revoked: i64 = row.try_get("", "revoked").expect("revocation count");
+    assert_eq!(revoked, 1);
 
     // Single-use: a second complete on the same token fails.
     assert!(
         PasswordReset::complete(&token, "again1!").await.is_err(),
         "a consumed reset token must not complete again"
     );
+}
+
+#[tokio::test]
+async fn profile_update_does_not_restore_stale_authentication_state() {
+    let _h = setup().await;
+    let user = User::create("Stale Snapshot", "stale@nebula.test", "oldpass1!")
+        .await
+        .expect("create user");
+    let stale = user.clone();
+    let user_id = user.id;
+    let replacement_hash = suprnova::hashing::hash("newpass1!").expect("hash replacement");
+    user.update_password_hash(replacement_hash.clone())
+        .await
+        .expect("rotate stored hash");
+
+    suprnova::DB::connection()
+        .expect("DB initialized")
+        .inner()
+        .execute_unprepared(&format!(
+            "UPDATE app_users SET auth_epoch = 7 WHERE id = {}",
+            user_id
+        ))
+        .await
+        .expect("advance auth epoch");
+
+    stale
+        .update_profile(
+            "Fresh Profile".to_owned(),
+            "stale-updated@nebula.test".to_owned(),
+            None,
+        )
+        .await
+        .expect("save profile columns");
+
+    let updated = reload("stale-updated@nebula.test").await;
+    assert_eq!(
+        updated.password_hash.as_deref(),
+        Some(replacement_hash.as_str())
+    );
+    assert_eq!(updated.auth_epoch, 7);
 }
 
 // ============================================================================
@@ -331,7 +428,8 @@ async fn password_reset_rotates_password_revokes_sessions_and_is_anti_enumeratin
 
 #[tokio::test]
 async fn profile_email_change_reverifies_and_password_and_delete_logic() {
-    let _h = setup().await;
+    let h = setup().await;
+    let fake = &h.mail;
 
     let mut user = User::create("Edsger", "edsger@x.com", "oldpass1!")
         .await
@@ -344,12 +442,14 @@ async fn profile_email_change_reverifies_and_password_and_delete_logic() {
 
     // --- Email change: null the verification stamp, save, re-send the link.
     //     This mirrors `profile::update` exactly.
-    let fake = Mail::fake();
-    let mut user = reload("edsger@x.com").await;
-    user.name = "Edsger Dijkstra".into();
-    user.email = "edsger.new@x.com".into();
-    user.set_email_verified_at(None);
-    suprnova::eloquent::Model::save(&user)
+    let before_send = fake.count();
+    let user = reload("edsger@x.com")
+        .await
+        .update_profile(
+            "Edsger Dijkstra".to_owned(),
+            "edsger.new@x.com".to_owned(),
+            None,
+        )
         .await
         .expect("save profile update");
     EmailVerification::send_link(&user, "http://nebula.test/verify-email/verify")
@@ -357,13 +457,21 @@ async fn profile_email_change_reverifies_and_password_and_delete_logic() {
         .expect("re-send verification after email change");
 
     let updated = reload("edsger.new@x.com").await;
-    assert_eq!(updated.name, "Edsger Dijkstra", "name saved");
+    assert_eq!(
+        updated.name.as_deref(),
+        Some("Edsger Dijkstra"),
+        "name saved"
+    );
     assert_eq!(updated.email, "edsger.new@x.com", "email saved");
     assert!(
         !updated.is_email_verified(),
         "changing the email nulls email_verified_at"
     );
-    assert_eq!(fake.count(), 1, "email change re-sends a verification link");
+    assert_eq!(
+        fake.count(),
+        before_send + 1,
+        "email change re-sends a verification link"
+    );
     fake.assert_sent_to("edsger.new@x.com");
 
     // --- Password rotation is gated on the current password. The controller
@@ -383,9 +491,8 @@ async fn profile_email_change_reverifies_and_password_and_delete_logic() {
     );
 
     // Rotate: hash + save the new password, exactly as `profile::update_password`.
-    let mut user = user;
-    user.password = suprnova::hashing::hash("brandnew1!").expect("hash");
-    suprnova::eloquent::Model::save(&user)
+    let new_hash = suprnova::hashing::hash("brandnew1!").expect("hash");
+    user.update_password_hash(new_hash)
         .await
         .expect("save rotated password");
     let after = reload("edsger.new@x.com").await;

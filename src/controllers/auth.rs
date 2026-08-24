@@ -8,11 +8,9 @@
 //! into `form.errors`), while non-Inertia clients get the Laravel-style
 //! 422 `{ message, errors }` envelope.
 
-use std::sync::Arc;
-
 use serde::Deserialize;
 use suprnova::{
-    Auth, Credentials, FormRequest, InertiaProps, Request, Response, Validate, ValidationErrors,
+    Auth, FormRequest, FrameworkError, InertiaProps, Request, Response, Validate, ValidationErrors,
     handler, inertia_response, redirect,
 };
 
@@ -65,22 +63,42 @@ pub async fn login(req: Request) -> Response {
         Err(FormFailure::Response(resp)) => return Err(*resp),
     };
 
-    // `Auth::attempt` verifies the password through the registered user
-    // provider, logs the user into the session on success, and issues a
-    // remember-me token when requested - all via the named-guard system
-    // wired in bootstrap.rs.
-    match Auth::attempt(
-        &Credentials::password(&form.email, &form.password),
-        form.remember,
-    )
-    .await?
+    match Auth::password()
+        .authenticate(&form.email, &form.password, None, None)
+        .await
     {
-        Some(_user) => redirect!("/dashboard").into(),
-        None => {
+        Ok((user, _session)) => {
+            if form.remember {
+                let ttl_minutes = i64::try_from(
+                    suprnova::SessionConfig::from_env()
+                        .remember_lifetime
+                        .as_secs()
+                        / 60,
+                )
+                .unwrap_or(i64::MAX);
+                if let Err(error) = Auth::issue_remember_cookie(user.id.as_str(), ttl_minutes).await
+                {
+                    if let Err(revoke_error) =
+                        suprnova::magnetar_integration::revoke_all_sessions(user.id.as_str()).await
+                    {
+                        tracing::error!(error = %revoke_error, "failed to revoke session after remember-login failure");
+                    }
+                    if let Err(logout_error) = Auth::logout().await {
+                        tracing::error!(error = %logout_error, "failed to clear authentication after remember-login failure");
+                    }
+                    return Err(error.into());
+                }
+            }
+            redirect!("/dashboard").into()
+        }
+        Err(FrameworkError::Domain {
+            status_code: 401, ..
+        }) => {
             let mut errors = ValidationErrors::new();
             errors.add("email", "These credentials do not match our records.");
             render_login(&ctx, errors).await
         }
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -131,6 +149,11 @@ async fn render_register(ctx: &InertiaCtx, errors: ValidationErrors) -> Response
     }
 }
 
+fn looks_like_email_unique_error(error: &FrameworkError) -> bool {
+    let message = error.to_string().to_ascii_lowercase();
+    (message.contains("unique") || message.contains("duplicate")) && message.contains("email")
+}
+
 #[handler]
 pub async fn register(req: Request) -> Response {
     let ctx = InertiaCtx::of(&req);
@@ -146,10 +169,30 @@ pub async fn register(req: Request) -> Response {
         return render_register(&ctx, errors).await;
     }
 
-    let user = User::create(&form.name, &form.email, &form.password).await?;
-    let user = Arc::new(user);
-    // Log the freshly-created user into the session (fires the Login event).
-    Auth::login(user.clone(), false).await?;
+    let user = match User::create(&form.name, &form.email, &form.password).await {
+        Ok(user) => user,
+        Err(error) if looks_like_email_unique_error(&error) => {
+            let mut errors = ValidationErrors::new();
+            errors.add("email", "This email is already registered.");
+            return render_register(&ctx, errors).await;
+        }
+        Err(error) => return Err(error.into()),
+    };
+    if let Err(error) = Auth::password()
+        .authenticate(&form.email, &form.password, None, None)
+        .await
+    {
+        if let Err(revoke_error) =
+            suprnova::magnetar_integration::revoke_all_sessions(&user.id.to_string()).await
+        {
+            tracing::error!(error = %revoke_error, "failed to revoke sessions after registration failure");
+        }
+        if let Err(delete_error) = suprnova::Model::delete(user).await {
+            tracing::error!(error = %delete_error, "failed to remove user after registration failure");
+            return Err(delete_error.into());
+        }
+        return Err(error.into());
+    }
 
     // Send the verification link to the new account. The user implements
     // `MustVerifyEmail`, so the provider-agnostic facade mints a token and
@@ -162,8 +205,7 @@ pub async fn register(req: Request) -> Response {
     // 500 registration. We log and continue - the user lands on the verified
     // gate at `/verify-email` and can resend from there.
     let base = format!("{}/verify-email/verify", crate::controllers::app_url());
-    if let Err(err) = suprnova::auth_flows::EmailVerification::send_link(user.as_ref(), &base).await
-    {
+    if let Err(err) = suprnova::auth_flows::EmailVerification::send_link(&user, &base).await {
         tracing::warn!(error = %err, "failed to send verification email on registration");
     }
 

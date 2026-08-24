@@ -5,29 +5,15 @@ pub struct Migration;
 
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(Alias::new("users"))
-                    .add_column(
-                        ColumnDef::new(Alias::new("email_verified_at"))
-                            .timestamp_with_time_zone()
-                            .null(),
-                    )
-                    .to_owned(),
-            )
-            .await
+    async fn up(&self, _manager: &SchemaManager) -> Result<(), DbErr> {
+        // Fresh installations receive `email_verified_at` from the canonical
+        // app_users baseline. Existing installations retain this migration's
+        // recorded history; `init_magnetar` performs the shape-aware,
+        // data-preserving users-to-app_users upgrade at application boot.
+        Ok(())
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(Alias::new("users"))
-                    .drop_column(Alias::new("email_verified_at"))
-                    .to_owned(),
-            )
-            .await
+    async fn down(&self, _manager: &SchemaManager) -> Result<(), DbErr> {
+        Ok(())
     }
 }

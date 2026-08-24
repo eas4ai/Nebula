@@ -23,8 +23,8 @@
 use serde::Deserialize;
 use suprnova::auth_flows::EmailVerification;
 use suprnova::{
-    Auth, CanResetPassword, FormRequest, FrameworkError, InertiaProps, Model, MustVerifyEmail,
-    Request, Response, Validate, ValidationErrors, handler, hashing, inertia_response, redirect,
+    Auth, FormRequest, FrameworkError, InertiaProps, Model, MustVerifyEmail, Request, Response,
+    Validate, ValidationErrors, handler, hashing, inertia_response, redirect,
 };
 
 use crate::controllers::{FormFailure, InertiaCtx, errors_json, inertia_form, validation_failure};
@@ -108,8 +108,8 @@ async fn render_profile(ctx: &InertiaCtx, errors: ValidationErrors) -> Response 
     if ctx.wants_inertia() {
         let user = current_user().await?;
         inertia_response!(ctx, "Profile", {
-            "name": user.name,
-            "email": user.email,
+            "name": user.name.clone().unwrap_or_default(),
+            "email": user.email.clone(),
             "email_verified": user.is_email_verified(),
             "errors": errors_json(&errors),
         })
@@ -130,7 +130,7 @@ pub async fn show(req: Request) -> Response {
         &req,
         "Profile",
         ProfileProps {
-            name: user.name.clone(),
+            name: user.name.clone().unwrap_or_default(),
             email: user.email.clone(),
             email_verified: user.is_email_verified(),
         }
@@ -154,10 +154,10 @@ pub async fn update(req: Request) -> Response {
         Err(FormFailure::Response(resp)) => return Err(*resp),
     };
 
-    let mut user = current_user().await?;
+    let user = current_user().await?;
     let email_changed = user.email != form.email;
 
-    // Guard the `users.email` unique constraint: if the new address belongs to
+    // Guard the `app_users.email` unique constraint: if the new address belongs to
     // a *different* account, surface the error on `email` rather than letting
     // the insert/update hit the DB constraint and 500. Re-submitting the same
     // address (email unchanged) is fine and skips the lookup.
@@ -170,12 +170,14 @@ pub async fn update(req: Request) -> Response {
         return render_profile(&ctx, errors).await;
     }
 
-    user.name = form.name;
-    user.email = form.email;
-    if email_changed {
-        user.set_email_verified_at(None);
-    }
-    Model::save(&user).await?;
+    let email_verified_at = if email_changed {
+        None
+    } else {
+        user.email_verified_at
+    };
+    let user = user
+        .update_profile(form.name, form.email, email_verified_at)
+        .await?;
 
     if email_changed {
         let base = format!("{}/verify-email/verify", crate::controllers::app_url());
@@ -201,7 +203,7 @@ pub async fn update_password(req: Request) -> Response {
         Err(FormFailure::Response(resp)) => return Err(*resp),
     };
 
-    let mut user = current_user().await?;
+    let user = current_user().await?;
 
     if !user.verify_password(&form.current_password)? {
         let mut errors = ValidationErrors::new();
@@ -209,19 +211,18 @@ pub async fn update_password(req: Request) -> Response {
         return render_profile(&ctx, errors).await;
     }
 
-    user.set_password_hash(&hashing::hash(&form.password)?);
-    Model::save(&user).await?;
+    user.update_password_hash(hashing::hash(&form.password)?)
+        .await?;
 
     redirect!("/profile").into()
 }
 
 /// `DELETE /profile` - password-gated account deletion.
 ///
-/// Verify the confirming password (wrong → error on `password`), then log
-/// the session out and delete the user row. Deletion happens last so an
-/// already-logged-out-then-failed-delete can't leave a ghost session pointing
-/// at a live account; if the delete fails the user is logged out and re-auth
-/// is required, which is the safe direction.
+/// Verify the confirming password (wrong → error on `password`), revoke every
+/// authoritative Magnetar session, then clear the current framework session
+/// before deleting the user row. A later delete failure leaves the account
+/// logged out, which is the safe direction.
 #[handler]
 pub async fn destroy(req: Request) -> Response {
     let ctx = InertiaCtx::of(&req);
@@ -239,6 +240,7 @@ pub async fn destroy(req: Request) -> Response {
         return render_profile(&ctx, errors).await;
     }
 
+    suprnova::magnetar_integration::revoke_all_sessions(&user.id.to_string()).await?;
     Auth::logout().await?;
     Model::delete(user).await?;
 
