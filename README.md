@@ -36,7 +36,7 @@ in the [Suprnova manual](https://github.com/eas4ai/suprnova/blob/main/manual/sta
 You'll need Rust (stable), Node 20+, and the Suprnova CLI:
 
 ```bash
-cargo install --git https://github.com/eas4ai/suprnova.git suprnova-cli
+cargo install --git https://github.com/eas4ai/suprnova.git --tag v1.3.1 suprnova-cli
 ```
 
 Then:

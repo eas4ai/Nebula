@@ -47,14 +47,12 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use sea_orm::{ConnectionTrait, Statement};
-use sea_orm_migration::MigratorTrait;
 
 use suprnova::auth::AuthConfig;
 use suprnova::auth_flows::{EmailVerification, PasswordReset};
 use suprnova::mail::{Mail, MailFake};
 use suprnova::{App, Auth, AuthManager, Authenticatable, EloquentUserProvider, MustVerifyEmail};
 
-use nebula::migrations::Migrator;
 use nebula::models::user::User;
 
 /// Held-for-the-test guard: keeps the SeaORM connection registered for the
@@ -78,27 +76,7 @@ async fn setup() -> Harness {
         std::env::set_var("APP_URL", "http://nebula.test");
     }
     let mail = Mail::fake();
-    suprnova::Crypt::init(suprnova::EncryptionKey::generate());
-
-    let conn = sea_orm::Database::connect("sqlite::memory:")
-        .await
-        .expect("connect sqlite::memory:");
-    Migrator::up(&conn, None)
-        .await
-        .expect("run Nebula migrations against sqlite::memory:");
-    App::singleton(suprnova::DbConnection::from_raw(conn));
-    let db = suprnova::DB::connection().expect("DB not initialized");
-    let magnetar = suprnova::MagnetarConfig::from_sea_orm(db.inner().clone()).passkey_config(
-        suprnova::PasskeyConfig {
-            rp_id: std::env::var("PASSKEY_RP_ID").unwrap_or_else(|_| "localhost".to_string()),
-            rp_origin: std::env::var("PASSKEY_RP_ORIGIN")
-                .unwrap_or_else(|_| "http://localhost".to_string()),
-        },
-    );
-    suprnova::init_magnetar(magnetar)
-        .await
-        .expect("Failed to initialize Magnetar");
-    suprnova::rate_limit::bootstrap_default().await;
+    common::fresh_magnetar_database().await;
 
     // Auth wiring - mirror `bootstrap::register()` exactly. `AuthConfig::default()`'s
     // "web" guard points at the "users" provider.
@@ -196,7 +174,7 @@ async fn verification_sends_link_consumes_once_and_persists_stamp() {
         .expect("send verification link");
     fake.assert_sent_to("grace@nebula.test");
     assert_eq!(fake.count(), baseline + 1, "exactly one verification mail");
-    let token = token_from_fake(&fake);
+    let token = token_from_fake(fake);
 
     // Not yet verified in the DB.
     assert!(!reload("grace@nebula.test").await.is_email_verified());
@@ -256,7 +234,7 @@ async fn resend_sends_a_fresh_link_and_is_silent_for_unknown() {
     );
     fake.assert_sent_to("ada@nebula.test");
     assert!(
-        !token_from_fake(&fake).is_empty(),
+        !token_from_fake(fake).is_empty(),
         "the resent link carries a token"
     );
 
@@ -320,7 +298,7 @@ async fn password_reset_rotates_password_revokes_sessions_and_is_anti_enumeratin
         "known email must trigger a reset mail"
     );
     fake.assert_sent_to("ada@x.com");
-    let token = token_from_fake(&fake);
+    let token = token_from_fake(fake);
 
     // Unknown email → anti-enumeration: nothing sent, still Ok.
     let unknown_before = fake.count();

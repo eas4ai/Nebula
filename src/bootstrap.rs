@@ -130,7 +130,7 @@ pub async fn register() {
     // target until its 20-redirect cap kills the visit).
     //
     // The config passed here is the default every `InertiaResponse` starts
-    // from (framework v1.2.4), so INERTIA_VERSION is the one named place to
+    // from (framework v1.3.1), so INERTIA_VERSION is the one named place to
     // bump when you ship new assets, and the pinned frontend reaches the
     // rendered HTML shell without `SUPRNOVA_FRONTEND` being set at runtime.
     Inertia::install(&InertiaConfig::new().version(INERTIA_VERSION).frontend(Frontend::Svelte))

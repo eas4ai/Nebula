@@ -19,7 +19,7 @@ name = "console"
 path = "src/bin/console.rs"
 
 [dependencies]
-suprnova = { git = "https://github.com/eas4ai/suprnova.git", rev = "00f4d827b642e708c4262e944452e4ea3c9e50b2" }
+suprnova = { git = "https://github.com/eas4ai/suprnova.git", tag = "v1.3.1" }
 tokio = { version = "1", features = ["full"] }
 sea-orm-migration = { version = "2.0", features = ["sqlx-sqlite", "sqlx-postgres", "runtime-tokio-native-tls"] }
 sea-orm = { version = "2.0", features = ["sqlx-sqlite", "sqlx-postgres", "runtime-tokio-native-tls", "macros", "postgres-use-serial-pk"] }

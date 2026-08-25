@@ -47,7 +47,6 @@ use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use sea_orm_migration::MigratorTrait;
 use serde_json::{Value, json};
 
 use suprnova::auth::AuthConfig;
@@ -59,7 +58,6 @@ use suprnova::{
 };
 
 use nebula::middleware::LoggingMiddleware;
-use nebula::migrations::Migrator;
 use nebula::models::user::User;
 
 /// Held-for-the-test guard: keeps the SeaORM connection + auth wiring
@@ -98,28 +96,7 @@ async fn setup() -> Harness {
     // `Server::from_config` installs one at boot; this harness drives
     // `handle_request` directly, so install a process-wide test key here.
     let mail = Mail::fake();
-    // The ring is a sealed OnceCell: the first test wins, later calls no-op.
-    suprnova::Crypt::init(suprnova::EncryptionKey::generate());
-
-    let conn = sea_orm::Database::connect("sqlite::memory:")
-        .await
-        .expect("connect sqlite::memory:");
-    Migrator::up(&conn, None)
-        .await
-        .expect("run Nebula migrations against sqlite::memory:");
-    App::singleton(suprnova::DbConnection::from_raw(conn));
-    let db = suprnova::DB::connection().expect("DB not initialized");
-    let magnetar = suprnova::MagnetarConfig::from_sea_orm(db.inner().clone()).passkey_config(
-        suprnova::PasskeyConfig {
-            rp_id: std::env::var("PASSKEY_RP_ID").unwrap_or_else(|_| "localhost".to_string()),
-            rp_origin: std::env::var("PASSKEY_RP_ORIGIN")
-                .unwrap_or_else(|_| "http://localhost".to_string()),
-        },
-    );
-    suprnova::init_magnetar(magnetar)
-        .await
-        .expect("Failed to initialize Magnetar");
-    suprnova::rate_limit::bootstrap_default().await;
+    common::fresh_magnetar_database().await;
 
     App::singleton(AuthManager::new(AuthConfig::default()));
     Auth::register_provider("users", Arc::new(EloquentUserProvider::<User>::new()))
@@ -427,7 +404,7 @@ async fn register_then_verify_email_over_http() {
     // A verification mail was captured for the new address.
     fake.assert_sent_to("grace@nebula.test");
     assert_eq!(fake.count(), before + 1, "exactly one verification mail");
-    let token = token_from_fake(&fake);
+    let token = token_from_fake(fake);
 
     // Logged in but unverified: the `verified` gate bounces to the notice.
     let resp = client.get("/dashboard").await;
