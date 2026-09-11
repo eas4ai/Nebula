@@ -19,7 +19,7 @@ production-shaped account story on day one:
 - **A branded frontend** - Inertia 3 + Svelte 5 (runes) + sv5ui, dark by
   default, with the Nebula icon set served at the web root.
 
-The backend is Rust on Suprnova; the frontend is a Vite + Tailwind v4 SPA
+The backend is Rust on Suprnova 2.0.0; the frontend is a Vite + Tailwind v4 SPA
 bridged over Inertia. Everything below is wired and tested - clone it,
 rename it, build your app on top.
 
@@ -36,7 +36,7 @@ in the [Suprnova manual](https://github.com/eas4ai/suprnova/blob/main/manual/sta
 You'll need Rust (stable), Node 20+, and the Suprnova CLI:
 
 ```bash
-cargo install --git https://github.com/eas4ai/suprnova.git --tag v1.3.1 suprnova-cli
+cargo install --git https://github.com/eas4ai/suprnova.git --tag v2.0.0 suprnova-cli
 ```
 
 Then:

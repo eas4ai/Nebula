@@ -25,6 +25,8 @@
 
 use std::sync::Arc;
 
+use sea_orm_migration::MigratorTrait;
+
 #[allow(unused_imports)]
 use suprnova::{
     App, Auth, AuthConfig, AuthManager, CsrfMiddleware, DB, EloquentUserProvider, FrameworkError,
@@ -80,9 +82,16 @@ impl InertiaSharedData for AuthShare {
 pub const INERTIA_VERSION: &str = "1.0";
 
 pub async fn register() {
+    // Console and server bootstrap both need Crypt before Magnetar is installed.
+    suprnova::boot::initialize_crypt_or_exit();
+
     // Initialize database connection
     DB::init().await.expect("Failed to connect to database");
     let db = DB::connection().expect("DB not initialized");
+    // Apply the kit schema before Magnetar can create its shared user table.
+    crate::migrations::Migrator::up(db.inner(), None)
+        .await
+        .expect("Failed to migrate application database");
     let magnetar = suprnova::MagnetarConfig::from_sea_orm(db.inner().clone()).passkey_config(
         suprnova::PasskeyConfig {
             rp_id: std::env::var("PASSKEY_RP_ID").unwrap_or_else(|_| "localhost".to_string()),
