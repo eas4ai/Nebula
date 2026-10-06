@@ -983,3 +983,42 @@ async fn branding_statics_resolve_at_web_root() {
     let stray = client.get("/site.webmanifest.bak").await;
     assert_eq!(stray.status, 404);
 }
+
+#[tokio::test]
+async fn frontend_assets_stay_within_public_route_boundary() {
+    let mut harness = setup().await;
+    let addr = harness.spawn_app().await;
+    let mut client = Client::new(addr);
+
+    let name = format!("nebula-assets-test-{}", std::process::id());
+    let directory = suprnova::public_path(format!("assets/{name}"));
+    std::fs::create_dir_all(directory.parent().unwrap()).unwrap();
+    std::fs::create_dir(&directory).unwrap();
+    std::fs::write(directory.join("app.js"), "console.log('Nebula');").unwrap();
+    std::fs::write(directory.join("app.css"), "body { color: white; }").unwrap();
+    let unlisted = suprnova::public_path(format!("{name}.txt"));
+    std::fs::write(&unlisted, "unlisted public fixture").unwrap();
+
+    let script = client.get(&format!("/assets/{name}/app.js")).await;
+    let style = client.get(&format!("/assets/{name}/app.css")).await;
+    let root_file = client.get(&format!("/{name}.txt")).await;
+    let traversal = client.get(&format!("/assets/%2e%2e/{name}.txt")).await;
+    let missing = client.get(&format!("/assets/{name}/missing.js")).await;
+
+    // Remove fixtures before assertions, including the expected failing run.
+    std::fs::remove_dir_all(&directory).unwrap();
+    std::fs::remove_file(&unlisted).unwrap();
+
+    assert_eq!(script.status, 200, "built JavaScript must be served");
+    assert_eq!(script.body, "console.log('Nebula');");
+    assert!(script.headers["content-type"].contains("javascript"));
+    assert_eq!(style.status, 200, "built CSS must be served");
+    assert_eq!(style.body, "body { color: white; }");
+    assert!(style.headers["content-type"].starts_with("text/css"));
+    assert_eq!(root_file.status, 404, "unlisted root files stay private");
+    assert_eq!(
+        traversal.status, 404,
+        "asset URLs cannot escape their prefix"
+    );
+    assert_eq!(missing.status, 404, "missing assets stay a 404");
+}

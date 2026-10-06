@@ -1,6 +1,6 @@
 [package]
 name = "nebula"
-version = "2.0.0"
+version = "2.0.1"
 rust-version = "1.94.0"
 edition = "2024"
 description = "A starter kit for Suprnova"
@@ -19,7 +19,7 @@ name = "console"
 path = "src/bin/console.rs"
 
 [dependencies]
-suprnova = { git = "https://github.com/eas4ai/suprnova.git", tag = "v2.0.0" }
+suprnova = { git = "https://github.com/eas4ai/suprnova.git", tag = "v3.2.1" }
 tokio = { version = "1", features = ["full"] }
 sea-orm-migration = { version = "2.0", features = ["sqlx-sqlite", "sqlx-postgres", "runtime-tokio-native-tls"] }
 sea-orm = { version = "2.0", features = ["sqlx-sqlite", "sqlx-postgres", "runtime-tokio-native-tls", "macros", "postgres-use-serial-pk"] }

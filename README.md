@@ -19,7 +19,7 @@ production-shaped account story on day one:
 - **A branded frontend** - Inertia 3 + Svelte 5 (runes) + sv5ui, dark by
   default, with the Nebula icon set served at the web root.
 
-The backend is Rust on Suprnova 2.0.0; the frontend is a Vite + Tailwind v4 SPA
+The backend is Rust on Suprnova 3.2.1; the frontend is a Vite + Tailwind v4 SPA
 bridged over Inertia. Everything below is wired and tested - clone it,
 rename it, build your app on top.
 
@@ -36,7 +36,7 @@ in the [Suprnova manual](https://github.com/eas4ai/suprnova/blob/main/manual/sta
 You'll need Rust (stable), Node 20+, and the Suprnova CLI:
 
 ```bash
-cargo install --git https://github.com/eas4ai/suprnova.git --tag v2.0.0 suprnova-cli
+cargo install --git https://github.com/eas4ai/suprnova.git --tag v3.2.1 suprnova-cli
 ```
 
 Then:
@@ -136,10 +136,30 @@ match arm and one `get!` route. Anything not whitelisted is refused even
 if a matching file exists under `public/`, so the handler can never be
 pointed at an unexpected path. The same handler runs in dev and prod.
 
+Built JS/CSS bundles use a separate `/assets/{*path}` route backed by
+Suprnova's `StaticFiles` handler. Other root-level public files still
+require the explicit whitelist and route described above.
+
 **Head and meta.** Inertia's Svelte adapter uses Svelte's native
 `<svelte:head>`. The app-wide defaults (title, icon links, manifest) are
 in `frontend/src/lib/Layout.svelte`; any page can override the title with
 its own `<svelte:head><title>` block, as `Home.svelte` does.
+
+## Production
+
+Build the frontend with `cd frontend && npm run build`, then build the
+server from the repository root with `cargo build --release`. Deploy
+`public/assets/` alongside the server binary.
+
+Set `APP_ENV=production`, `APP_DEBUG=false`, a generated `APP_KEY`, and
+the public `APP_URL`. Configure a delivering mail driver such as SMTP;
+production boot rejects the development `log` driver.
+
+Set `RATE_LIMIT_DRIVER=redis` and `RATE_LIMIT_REDIS_URL` to share
+authentication quotas across replicas. Production boot rejects the
+default in-memory limiter. For exactly one server process,
+`RATE_LIMIT_ALLOW_MEMORY_IN_PRODUCTION=true` explicitly permits memory
+limits, which reset on restart.
 
 ## Testing
 

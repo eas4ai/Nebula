@@ -1,4 +1,4 @@
-use suprnova::{delete, get, group, patch, post, put, routes};
+use suprnova::{StaticFiles, delete, get, group, patch, post, put, routes};
 
 use crate::controllers;
 use crate::middleware;
@@ -7,9 +7,13 @@ routes! {
     // Public routes
     get!("/", controllers::home::index),
 
+    // Vite's manifest references bundles under /assets; branding files at
+    // the web root keep their explicit whitelist below.
+    get!("/assets/{*path}", StaticFiles::public().handler()),
+
     // Branding files browsers and the web app manifest request at the web
-    // root. The framework server has no static-file handler, so the kit
-    // serves its small `public/` whitelist through explicit routes - the
+    // root. The public directory is not served implicitly, so the kit
+    // serves its small root-level whitelist through explicit routes - the
     // same handler in dev and prod (the page origin is the Rust server in
     // both; Vite only supplies JS/CSS).
     get!("/favicon.ico", controllers::static_files::serve),
