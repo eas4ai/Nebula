@@ -94,12 +94,15 @@ real emails in a real inbox during dev, run
 
 ```dotenv
 MAIL_DRIVER=smtp
-MAIL_HOST=localhost
-MAIL_PORT=1025
+MAIL_SMTP_HOST=localhost
+MAIL_SMTP_PORT=1025
+MAIL_SMTP_ENCRYPTION=none
 ```
 
 For production, point the same SMTP variables at your provider (with
-`MAIL_USERNAME` / `MAIL_PASSWORD`), or use one of Suprnova's HTTP
+`MAIL_SMTP_USER` / `MAIL_SMTP_PASS` and
+`MAIL_SMTP_ENCRYPTION=starttls` for a suitable relay on 587, or `tls` for
+implicit TLS on 465), or use one of Suprnova's HTTP
 transports (Postmark, SES, SendGrid, Mailgun, Resend) via `MAIL_DRIVER`.
 `MAIL_FROM` is required whenever verification or reset mail is sent - the
 flows fail fast on a missing sender rather than minting orphan tokens.
@@ -184,3 +187,7 @@ Two complementary suites cover the account flows end-to-end:
 
 A failure in the first suite points at flow logic; a failure in the
 second points at HTTP wiring.
+
+## Upgrading
+
+For the Suprnova 3.2.1 upgrade, follow [UPGRADE.md](UPGRADE.md), including production configuration and rollback steps.
