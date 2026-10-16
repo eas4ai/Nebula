@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { useForm } from '@inertiajs/svelte'
+  import { Link, useForm } from '@inertiajs/svelte'
   import Link2OffIcon from '@lucide/svelte/icons/link-2-off'
   import MailCheckIcon from '@lucide/svelte/icons/mail-check'
   import Head from '$lib/components/Head.svelte'
@@ -69,6 +69,13 @@
         Resend verification email
       </SubmitButton>
     </form>
+
+    <!-- Profile stays open to unverified users, so a mistyped address can
+         be corrected there (`src/routes.rs`). -->
+    <p class="text-center text-sm text-muted-foreground">
+      Wrong address?
+      <Link href="/profile" class="text-primary underline-offset-4 hover:underline">Update it in your profile</Link>.
+    </p>
   </Card.Content>
   <Card.Footer class="justify-center">
     <form onsubmit={logout}>
