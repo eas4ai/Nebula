@@ -111,12 +111,15 @@ flows fail fast on a missing sender rather than minting orphan tokens.
 
 ## APP_URL
 
-Verification and reset links, and the links in `/llms.txt`, are built
-from `APP_URL`, not from the incoming request - keep it in sync with how
-you actually reach the app (default `http://localhost:8080`, matching
-`SERVER_PORT`). If you serve the kit on a named TLS dev URL via
-`suprnova dev:tls`, set `APP_URL=https://<name>.localhost` so emailed
-links land on the right origin.
+Verification and reset links, canonical links, the sitemap and the links
+in `/llms.txt` are built from `APP_URL`, not from the incoming request -
+keep it in sync with how you actually reach the app. `.env.example` sets
+`http://localhost:8080`, matching `SERVER_PORT`. Unset, development and
+test runs fall back to `http://localhost:8765`, and production refuses to
+start: there it must be an absolute `http://` or `https://` URL with a
+host. If you serve the kit on a named TLS dev URL via `suprnova dev:tls`,
+set `APP_URL=https://<name>.localhost` so emailed links land on the right
+origin.
 
 ## Make it yours
 
