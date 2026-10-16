@@ -998,8 +998,9 @@ async fn branding_statics_resolve_at_web_root() {
         manifest.body
     );
 
-    // The whitelist is the route table: an unrouted public path stays a 404
-    // (nothing falls through to a directory listing or arbitrary file read).
+    // The whitelist in `src/controllers/static_files.rs` is all that is
+    // served: an unlisted public path stays a 404 (nothing falls through to a
+    // directory listing or arbitrary file read).
     let stray = client.get("/site.webmanifest.bak").await;
     assert_eq!(stray.status, 404);
 }
