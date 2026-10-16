@@ -1625,7 +1625,24 @@ async fn seo_001_canonical_link_comes_from_app_url() {
         "canonical of /login"
     );
 
+    // A path that starts with `//` reads as another host to a URL parser;
+    // the canonical link must still stay on APP_URL.
     client.host = "nebula.test".to_string();
+    client.accept = Some("text/html".to_string());
+    let stray = client.get("//evil.example/x").await;
+    let canonical: Vec<&str> = head_tags(&stray.body, "link")
+        .into_iter()
+        .filter(|tag| attr(tag, "rel") == Some("canonical"))
+        .filter_map(|tag| attr(tag, "href"))
+        .collect();
+    assert!(
+        canonical
+            .iter()
+            .all(|href| href.starts_with("http://nebula.test/")),
+        "canonical of //evil.example/x leaves APP_URL: {canonical:?}"
+    );
+    client.accept = None;
+
     let home = client.get("/").await;
     let canonical: Vec<&str> = head_tags(&home.body, "link")
         .into_iter()
@@ -1708,7 +1725,15 @@ async fn seo_004_only_home_is_indexable() {
     let home = guest.get("/").await;
     assert!(!forbids_indexing(&home.body), "/ must stay indexable");
 
-    for path in ["/login", "/register", "/forgot-password", "/reset-password"] {
+    for path in [
+        "/login",
+        "/register",
+        "/forgot-password",
+        "/reset-password",
+        // The public verify link renders the verification page when its
+        // token is missing, invalid or expired.
+        "/verify-email/verify?token=not-a-token",
+    ] {
         let resp = guest.get(path).await;
         assert_eq!(resp.status, 200, "GET {path}: {}", resp.body);
         assert!(forbids_indexing(&resp.body), "{path} lacks noindex");
@@ -1868,6 +1893,46 @@ async fn seo_009_home_describes_the_site_in_json_ld() {
         org["logo"], "http://nebula.test/android-chrome-512x512.png",
         "{org}"
     );
+}
+
+/// The site name comes from `APP_NAME`, not from the `Nebula` fallback.
+#[tokio::test]
+async fn seo_003_site_name_follows_app_name() {
+    let mut harness = setup().await;
+    // SAFETY: as in `seo_003_open_graph_and_x_card`.
+    unsafe {
+        std::env::set_var("APP_NAME", "Acme Docs");
+    }
+    let mut client = Client::new(harness.spawn_app().await);
+
+    let login = client.get("/login").await;
+    assert!(
+        meta(&login.body, "og:site_name")
+            .iter()
+            .any(|c| c == "Acme Docs"),
+        "og:site_name ignores APP_NAME: {:?}",
+        meta(&login.body, "og:site_name")
+    );
+}
+
+/// The JSON-LD names come from `APP_NAME`, not from the `Nebula` fallback.
+#[tokio::test]
+async fn seo_009_json_ld_names_follow_app_name() {
+    let mut harness = setup().await;
+    // SAFETY: as in `seo_003_open_graph_and_x_card`.
+    unsafe {
+        std::env::set_var("APP_NAME", "Acme Docs");
+    }
+    let mut client = Client::new(harness.spawn_app().await);
+
+    let blocks = json_ld(&client.get("/").await.body);
+    for kind in ["WebSite", "Organization"] {
+        let block = blocks
+            .iter()
+            .find(|b| b["@type"] == kind)
+            .unwrap_or_else(|| panic!("no {kind} JSON-LD: {blocks:?}"));
+        assert_eq!(block["name"], "Acme Docs", "{kind} name ignores APP_NAME");
+    }
 }
 
 /// A guard: it also passes before the work. It catches a later change that
