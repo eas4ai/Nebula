@@ -21,6 +21,8 @@ A new Suprnova app needs a lot wired together and tested before its own work can
 | twins.md | TWIN | Markdown twins of public pages, `/llms.txt`, and the alternate link that advertises a twin |
 | static-files.md | STATIC | the branding files at the web root: favicons and the web app manifest |
 | seo.md | SEO | the head's canonical, description, robots, Open Graph and X tags, JSON-LD on Home, `/robots.txt` and `/sitemap.xml` |
+| boot.md | BOOT | what the server checks before it starts: `APP_URL` in production |
+| analytics.md | ANALYTICS | optional Plausible analytics: the script tag and the Content-Security-Policy it needs |
 
 ## Not yet specified
 

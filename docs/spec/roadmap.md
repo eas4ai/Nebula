@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: seo-kit
+Current: app-url-required
 
 ## markdown-twins
 
@@ -25,3 +25,19 @@ Requirements: SEO-001, SEO-002, SEO-003, SEO-004, SEO-005, SEO-006, SEO-007, SEO
 Delivery: on the `sudus` branch. Add `src/seo.rs`: the site defaults (`Head::defaults`: canonical link on `APP_URL`, description `SUMMARY`, Open Graph site name, type and image, X card `summary`), the error-page metadata (`Head::errors`: `noindex`), the Home JSON-LD, and the `RobotsTxt` and `Sitemap` middlewares, registered after `BrandingFiles` and before `SessionMiddleware`. The defaults replace any registered earlier, so registering the stack twice adds nothing twice. Give the sign-in, verification, dashboard and profile route groups `noindex` with `with_head`. Home sets its description, `og:title` and JSON-LD from `home::content()`. Each `PublicPage` in `src/markdown.rs` gains its own address for the sitemap; Home's is `/`. `APP_NAME` is read in one helper beside `app_url()`. The `seo_<nnn>_…` tests in `tests/http_flows.rs` are written before the start and fail until this work makes them pass. README gets a "Search engines and social sites" section: what Nebula sends, where to change the description and the social image, and why `robots.txt` blocks nothing. UPGRADE.md gets a 3.0.0 bullet for the new tags, the two paths and the middleware position.
 
 Done when: every requirement above has a current pass receipt. `cargo test --locked`, `cargo clippy`, `npm run check`, `npm run build` and `npm run build:ssr` pass. Curl against the dev server, with server rendering on, shows each head tag once on `/` and `/login`, and `/robots.txt` and `/sitemap.xml` without `Set-Cookie`. `README.md` and `UPGRADE.md` are updated.
+
+## app-url-required
+
+Requirements: BOOT-001, BOOT-002
+
+Delivery: on the `sudus` branch. Add the `APP_URL` check at the top of `bootstrap::try_register_http_stack`: in production, an unset, empty or non-`http(s)` `APP_URL` returns an error naming it, before anything is registered. Update `register_http_stack`'s panic text to mention `APP_URL`. The `boot_<nnn>_…` tests in `tests/http_flows.rs` are written before the start and fail until this work makes them pass. README's production section and the UPGRADE.md 3.0.0 notes say the server now refuses to start without `APP_URL` in production.
+
+Done when: every requirement above has a current pass receipt. `cargo test --locked` and `cargo clippy` pass. `README.md` and `UPGRADE.md` are updated.
+
+## analytics-plausible
+
+Requirements: ANALYTICS-001, ANALYTICS-002, ANALYTICS-003, ANALYTICS-004, ANALYTICS-005
+
+Delivery: on the `sudus` branch, after app-url-required. Read `PLAUSIBLE_SRC` and `PLAUSIBLE_DOMAIN` once at boot (`src/analytics.rs`), refusing an invalid `PLAUSIBLE_SRC`. `templates/app.html` writes the script tag with the request's nonce when both are set. When analytics is on, `try_register_http_stack` registers `SecurityHeaders` with the preset's policy plus the Plausible origin in `connect-src`. The `analytics_<nnn>_…` tests in `tests/http_flows.rs` are written before the start. README gets an "Analytics" section: the two variables, that Plausible is cookieless, and that the policy change is Nebula's. UPGRADE.md gets a 3.0.0 bullet. File Suprnova issues, without starting a fix, for an API to add an origin to a preset policy and for app-wide data in the root template.
+
+Done when: every requirement above has a current pass receipt. `cargo test --locked`, `cargo clippy`, `npm run check` and both frontend builds pass. With the two variables set against the dev server, the browser loads the script with no CSP error in the console. `README.md` and `UPGRADE.md` are updated.
