@@ -157,17 +157,21 @@ lost. `SubmitButton` stays disabled until the page is ready, and while the
 form is processing.
 
 **Root-served static files.** Suprnova routes everything - there is no
-implicit public directory, by design. The kit's pattern for files browsers
-request at the web root is `src/controllers/static_files.rs`: a
-`content_type` match that doubles as a whitelist, plus one explicit route
-per asset in `src/routes.rs`. To serve a new root-level file, add one
-match arm and one `get!` route. Anything not whitelisted is refused even
-if a matching file exists under `public/`, so the handler can never be
-pointed at an unexpected path. The same handler runs in dev and prod.
+implicit public directory, by design. The kit serves files browsers
+request at the web root through `BrandingFiles` in
+`src/controllers/static_files.rs`, a global middleware that runs before
+the session. Its `content_type` match doubles as a whitelist: to serve a
+new root-level file, add one match arm there; no route is needed. Anything
+not whitelisted passes on to the router even if a matching file exists
+under `public/`, so the middleware can never be pointed at an unexpected
+path. Because it runs before the session, these publicly cached files
+never carry a cookie. Do not serve a publicly cached file from a route:
+every routed response sets the session and `XSRF-TOKEN` cookies. The same
+middleware runs in dev and prod.
 
 Built JS/CSS bundles use a separate `/assets/{*path}` route backed by
-Suprnova's `StaticFiles` handler. Other root-level public files still
-require the explicit whitelist and route described above.
+Suprnova's `StaticFiles` handler, which sets no public cache header. Other
+root-level public files go through the whitelist described above.
 
 **Head and meta.** First visits render through the root template
 `templates/app.html`; put document-level head content there. It also holds
