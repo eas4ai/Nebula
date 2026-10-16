@@ -3,8 +3,8 @@
 //!
 //! The head tags come from Suprnova's `Head` API and reach both the first,
 //! server-rendered visit and the `head` prop that `serverHead` applies on
-//! later visits. Titles stay in the Svelte pages. The canonical link is built
-//! from `APP_URL`, never from the request's `Host`.
+//! later visits. Titles stay in the Svelte pages. [`CanonicalLink`] builds
+//! the canonical link from `APP_URL`, never from the request's `Host`.
 //!
 //! [`RobotsTxt`] and [`Sitemap`] are global middleware placed before the
 //! session middleware (see `bootstrap::try_register_http_stack`), as
@@ -42,14 +42,31 @@ pub fn register() {
     let image = absolute(&app_url(), SOCIAL_IMAGE);
     Head::defaults(|_| {
         HeadBuilder::new()
-            .canonical()
-            .canonical_keep_scheme()
             .description(SUMMARY)
             .og(site_og())
             .og_image(image)
             .twitter(TwitterCard::new().card(TwitterCardType::Summary))
     });
     Head::errors(|_| ErrorPages::default().defaults(|head| head.robots("noindex")));
+}
+
+/// Sets each request's canonical link to `APP_URL` plus the request's path,
+/// without the query string. Suprnova's own `canonical()` builds the link
+/// with `url::to`, which keeps a path that starts with `//` as a link to
+/// another host (`//evil.example/x`); built here, it always stays on
+/// `APP_URL`.
+pub struct CanonicalLink;
+
+#[async_trait]
+impl Middleware for CanonicalLink {
+    async fn handle(&self, request: Request, next: Next) -> Response {
+        let url = absolute(&app_url(), request.path());
+        if let Err(error) = Head::try_update(|head| head.canonical_url(url).canonical_keep_scheme())
+        {
+            tracing::warn!(%error, "the canonical link could not be set");
+        }
+        next(request).await
+    }
 }
 
 /// Home's own head: its description and `og:title` from the text it shows,
