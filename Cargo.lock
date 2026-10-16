@@ -3787,6 +3787,7 @@ dependencies = [
  "serde",
  "serde_json",
  "suprnova",
+ "suprnova-markdown",
  "tokio",
  "tracing",
  "validator",
@@ -6550,6 +6551,16 @@ dependencies = [
  "tracing",
  "uuid",
  "webauthn-rs",
+]
+
+[[package]]
+name = "suprnova-markdown"
+version = "0.3.0"
+source = "git+https://github.com/eas4ai/suprnova-markdown.git?tag=v0.3.0#14cb9e0756ea032f8117bcc1309bf4f7ef838d8c"
+dependencies = [
+ "async-trait",
+ "suprnova",
+ "tracing",
 ]
 
 [[package]]
