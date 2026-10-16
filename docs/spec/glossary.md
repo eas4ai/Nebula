@@ -20,3 +20,4 @@ Terms as the code names them. A term in `code` is an identifier in the source.
 - **Canonical link**: `<link rel="canonical">`, the one address search engines should index a page under. Nebula builds it from `APP_URL` and the page's path.
 - **Robots meta tag**: `<meta name="robots">` in a page's head. `noindex` or `none` keeps the page out of search results.
 - **Sitemap**: `/sitemap.xml`, the sitemaps.org list of the public pages' addresses.
+- **CSP nonce**: the per-request random value in the `Content-Security-Policy` (`'nonce-…'`). A `<script>` that carries it may run; `SecurityHeaders` makes a new one for every request.
