@@ -11,7 +11,7 @@ Status: Observed
 
 [PAGE-002] When a request sets a head tag, a first visit writes it into the HTML `<head>`, and an Inertia response carries the page's head tags as the `head` prop, which the client applies on later visits.
 Falsifier: A request sets a head tag, and the first visit's `<head>` lacks it, or the Inertia response's `head` prop lacks it.
-Rationale: `templates/app.html:35`, `src/bootstrap.rs:44-46`, `serverHead: true` in `frontend/src/main.ts:161` and `frontend/src/ssr.ts:18`, Suprnova v4.1.0 `framework/src/view/head.rs:11-15,479-499`. When nothing sets a head, the page has no `head` prop: an Inertia visit to `/login` has none, and one to `/` had none before Home linked its twin.
+Rationale: `templates/app.html:35`, `src/bootstrap.rs:44-46`, `serverHead: true` in `frontend/src/main.ts:161` and `frontend/src/ssr.ts:18`, Suprnova v4.1.0 `framework/src/view/head.rs:11-15,479-499`. When no layer sets anything (no defaults, no group or run-time tags), the page has no `head` prop at all.
 Status: Observed
 
 [PAGE-003] `app_url()` returns `APP_URL`, or `http://localhost:8765` when `APP_URL` is unset.
