@@ -268,6 +268,10 @@ binary, and run the SSR worker as a second process from `frontend/`:
 packages from `frontend/node_modules`). Without the worker, pages render in
 the browser.
 
+The server refuses to start in production without `APP_URL`, an absolute
+`http://` or `https://` URL: emailed links, canonical links, the sitemap
+and `/llms.txt` are built from it.
+
 Set `APP_ENV=production` (an unset `APP_ENV` is production too),
 `APP_DEBUG=false`, a generated `APP_KEY`, the public `APP_URL`, and
 `SESSION_SECURE=true`. Configure a delivering mail driver such as SMTP;
