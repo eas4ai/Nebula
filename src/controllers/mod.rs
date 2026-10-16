@@ -13,7 +13,7 @@ use suprnova::{
 
 /// The app's external base URL (for building emailed links). `APP_URL` or the dev default.
 pub(crate) fn app_url() -> String {
-    std::env::var("APP_URL").unwrap_or_else(|_| "http://localhost:8080".into())
+    std::env::var("APP_URL").unwrap_or_else(|_| "http://localhost:8765".into())
 }
 
 /// The app's name, for `/llms.txt` and the Open Graph site name. `APP_NAME`
