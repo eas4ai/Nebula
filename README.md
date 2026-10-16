@@ -16,8 +16,9 @@ production-shaped account story on day one:
   address is registered.
 - **Profile management** - update name/email (changing the email re-triggers
   verification), change password, delete the account.
-- **A branded frontend** - Inertia 3 + Svelte 5 (runes) + sv5ui, dark by
-  default, with the Nebula icon set served at the web root.
+- **A branded frontend** - Inertia 3 + Svelte 5 (runes) +
+  [shadcn-svelte](https://www.shadcn-svelte.com), dark by default, with the
+  Nebula icon set served at the web root.
 
 The backend is Rust on Suprnova 4.1.0; the frontend is a Vite + Tailwind v4 SPA
 bridged over Inertia, with server-side rendering for first visits. Everything below is wired and tested - clone it,
@@ -123,13 +124,22 @@ origin.
 (`favicon.ico`, the PNG sizes, `apple-touch-icon.png`,
 `site.webmanifest`). Replace those files with your own and the whole app
 follows - the tags that reference them are in
-`frontend/src/lib/Layout.svelte`.
+`templates/app.html`.
 
-**Colors.** The UI is sv5ui on Material-Design-3 OKLCH tokens.
-`frontend/src/app.css` overrides a handful of them under `:root`
-(`--color-primary`, `--color-on-primary`, `--color-primary-container`,
-`--color-on-primary-container`, `--color-tertiary`). Tune those values to
-restyle every component at once - no per-component theming needed.
+**Colors.** The UI is [shadcn-svelte](https://www.shadcn-svelte.com) on
+OKLCH theme tokens in `frontend/src/app.css`: `:root` holds the light
+theme and `.dark` the dark one. `--primary` is Nebula's cyan and
+`--brand-accent` its red/orange; the rest are shadcn-svelte's `zinc`
+defaults. Change a token there and every component follows. Keep each
+`--primary` / `--primary-foreground` pair at 4.5:1 contrast or better.
+
+**Components.** shadcn-svelte copies components into
+`frontend/src/lib/components/ui/`; they are your code from then on. Add
+one with `cd frontend && ./node_modules/.bin/shadcn-svelte add <name>`.
+Nebula's own pieces (layouts, `Head`, `SubmitButton`, the user menu, flash
+toasts) live in `frontend/src/lib/layouts/` and `frontend/src/lib/components/`.
+Sign-in pages (`pages/auth/*`) use the guest layout and every other page the
+app layout; `frontend/src/main.ts` and `ssr.ts` pick it.
 
 **Root-served static files.** Suprnova routes everything - there is no
 implicit public directory, by design. The kit's pattern for files browsers
@@ -147,11 +157,9 @@ require the explicit whitelist and route described above.
 **Head and meta.** First visits render through the root template
 `templates/app.html`; put document-level head content there. It also holds
 the script that sets light or dark mode before first paint, because it
-receives the request's Content-Security-Policy nonce. Inertia's Svelte
-adapter uses Svelte's native `<svelte:head>`: the app-wide defaults (title,
-icon links, manifest) are in `frontend/src/lib/Layout.svelte`, and any page
-can override the title with its own `<svelte:head><title>` block, as
-`Home.svelte` does.
+receives the request's Content-Security-Policy nonce. Each page sets its
+tab title with the `Head` component
+(`frontend/src/lib/components/Head.svelte`), which reads `<Page> · Nebula`.
 
 **Security headers.** Every response carries security headers, and HTML
 responses carry a Content-Security-Policy with a fresh nonce

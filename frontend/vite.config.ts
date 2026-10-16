@@ -27,12 +27,6 @@ export default defineConfig(({ isSsrBuild }) => ({
   resolve: {
     alias: {
       $lib: fileURLToPath(new URL('./src/lib', import.meta.url)),
-      // sv5ui's barrel reaches its SvelteKit-only Link ($app/state) for import
-      // resolution. The stub alias resolves the module; nothing imports Link so
-      // it remains inert in the bundle (Inertia <Link> owns navigation).
-      '$app/state': fileURLToPath(
-        new URL('./src/lib/sveltekit-app-stub.ts', import.meta.url),
-      ),
     },
   },
   server: {
