@@ -2034,68 +2034,65 @@ async fn boot_002_outside_production_app_url_defaults_to_localhost() {
     );
 }
 
-/// Run `f` with a log subscriber that writes into a buffer, and return what
-/// it wrote. The subscriber is this thread's default only while `f` runs.
-fn captured_logs(f: impl FnOnce()) -> String {
-    use std::sync::{Arc, Mutex};
-
-    #[derive(Clone, Default)]
-    struct Buffer(Arc<Mutex<Vec<u8>>>);
-    impl std::io::Write for Buffer {
-        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-            self.0.lock().expect("log buffer").extend_from_slice(bytes);
-            Ok(bytes.len())
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    let buffer = Buffer::default();
-    let writer = buffer.clone();
-    let subscriber = tracing_subscriber::fmt()
-        .with_writer(move || writer.clone())
-        .with_ansi(false)
-        .finish();
-    tracing::subscriber::with_default(subscriber, f);
-    let bytes = buffer.0.lock().expect("log buffer").clone();
-    String::from_utf8_lossy(&bytes).to_string()
+/// Run the `nebula` binary's `ssr:check` in production with `app_url`, from
+/// an empty directory with a fresh SQLite database and no other
+/// environment, and return what it wrote to stderr. `ssr:check` runs both
+/// boot hooks in the server's real order, so a warning shows here exactly
+/// when an operator would see it. It may stop later on the missing frontend
+/// build, after the APP_URL check.
+fn production_boot_stderr(run: usize, app_url: &str) -> String {
+    let working = std::env::temp_dir().join(format!("nebula-boot-{}-{run}", std::process::id()));
+    std::fs::create_dir_all(&working).expect("boot directory");
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_nebula"))
+        .arg("ssr:check")
+        .current_dir(&working)
+        .env_clear()
+        .env("APP_ENV", "production")
+        .env("APP_DEBUG", "false")
+        .env("APP_URL", app_url)
+        .env("APP_KEY", "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE")
+        .env(
+            "DATABASE_URL",
+            format!("sqlite://{}?mode=rwc", working.join("boot.db").display()),
+        )
+        .output()
+        .expect("run the nebula binary");
+    let _ = std::fs::remove_dir_all(&working);
+    String::from_utf8_lossy(&output.stderr).to_string()
 }
 
-/// Whether the logs hold a warning that names `APP_URL`.
-fn warns_about_app_url(logs: &str) -> bool {
-    logs.lines()
-        .any(|line| line.contains("WARN") && line.contains("APP_URL"))
+/// Whether stderr holds a warning that names `APP_URL`.
+fn warns_about_app_url(stderr: &str) -> bool {
+    stderr
+        .lines()
+        .any(|line| line.contains("warning") && line.contains("APP_URL"))
 }
 
-#[tokio::test]
-async fn boot_003_production_warns_about_a_loopback_app_url() {
-    let _harness = setup().await;
-
-    for url in [
+#[test]
+fn boot_003_production_warns_about_a_loopback_app_url() {
+    let loopback = [
         "http://localhost:8080",
         "https://nebula.localhost",
         "http://127.0.0.1:8080",
         "http://[::1]:8080",
-    ] {
-        let mut result = Ok(());
-        let logs = captured_logs(|| result = register_with("production", Some(url)));
-        if let Err(error) = &result {
-            assert!(
-                !error.contains("APP_URL"),
-                "production refused the loopback APP_URL {url}: {error}"
-            );
-        }
+        "http://localhost.:8080",
+        "http://[::ffff:127.0.0.1]:8080",
+    ];
+    for (run, url) in loopback.iter().enumerate() {
+        let stderr = production_boot_stderr(run, url);
         assert!(
-            warns_about_app_url(&logs),
-            "no warning names APP_URL for {url}: {logs}"
+            !stderr.contains("APP_URL: production needs"),
+            "production refused the loopback APP_URL {url}: {stderr}"
+        );
+        assert!(
+            warns_about_app_url(&stderr),
+            "no warning names APP_URL for {url}: {stderr}"
         );
     }
 
-    let mut result = Ok(());
-    let logs = captured_logs(|| result = register_with("production", Some("https://nebula.test")));
+    let stderr = production_boot_stderr(loopback.len(), "https://nebula.test");
     assert!(
-        !warns_about_app_url(&logs),
-        "a public APP_URL was warned about: {logs}"
+        !warns_about_app_url(&stderr),
+        "a public APP_URL was warned about: {stderr}"
     );
 }

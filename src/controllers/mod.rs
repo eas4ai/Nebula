@@ -38,23 +38,32 @@ pub(crate) fn require_app_url() -> Result<(), FrameworkError> {
         ));
     };
     // A loopback host is valid, and a production-mode smoke test on a
-    // workstation uses one, so it starts, but never quietly.
+    // workstation uses one, so it starts, but never quietly. On stderr, as
+    // Suprnova's own boot warnings are: this runs before `Server::run`
+    // installs the log subscriber, and a `tracing` event here is dropped.
     if is_loopback(&url) {
-        tracing::warn!(
-            host = url.host_str().unwrap_or_default(),
-            "APP_URL points at this machine: emailed links, canonical links and the sitemap will name a loopback host; set APP_URL to the app's public address"
+        eprintln!(
+            "nebula: warning: APP_URL's host {} is a loopback address: emailed links, canonical links and the sitemap will point at this machine. Set APP_URL to the app's public address.",
+            url.host_str().unwrap_or_default()
         );
     }
     Ok(())
 }
 
 /// Whether `url`'s host is a loopback name: `localhost` or a `.localhost`
-/// name, an address in `127.0.0.0/8` or `::1`, or the unspecified address.
+/// name (with or without a final dot), an address in `127.0.0.0/8`, `::1`
+/// or their IPv4-mapped form, or the unspecified address.
 fn is_loopback(url: &url::Url) -> bool {
+    let v4 = |ip: std::net::Ipv4Addr| ip.is_loopback() || ip.is_unspecified();
     match url.host() {
-        Some(url::Host::Domain(name)) => name == "localhost" || name.ends_with(".localhost"),
-        Some(url::Host::Ipv4(ip)) => ip.is_loopback() || ip.is_unspecified(),
-        Some(url::Host::Ipv6(ip)) => ip.is_loopback() || ip.is_unspecified(),
+        Some(url::Host::Domain(name)) => {
+            let name = name.trim_end_matches('.');
+            name == "localhost" || name.ends_with(".localhost")
+        }
+        Some(url::Host::Ipv4(ip)) => v4(ip),
+        Some(url::Host::Ipv6(ip)) => {
+            ip.is_loopback() || ip.is_unspecified() || ip.to_ipv4_mapped().is_some_and(v4)
+        }
         None => false,
     }
 }
