@@ -2,7 +2,8 @@
 //!
 //! A handler that finishes an action flashes `success` or `error` copy with
 //! `redirect!(...).with(...)`. The next page response carries it as
-//! `page.flash` and removes it, so the layouts' `FlashToaster` shows it once.
+//! `page.flash` and removes it, so `frontend/src/lib/flash.ts` shows it
+//! once, as a toast.
 
 use suprnova::InertiaProps;
 

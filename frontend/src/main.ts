@@ -3,6 +3,7 @@ import { createInertiaApp } from '@inertiajs/svelte'
 import { hydrate, mount } from 'svelte'
 import AppLayout from '$lib/layouts/AppLayout.svelte'
 import GuestLayout from '$lib/layouts/GuestLayout.svelte'
+import { showFlashAsToasts } from '$lib/flash.js'
 
 // Exception text can include copied URLs or credentials even without request context.
 function redactBrowserText(text: string): string {
@@ -134,6 +135,10 @@ void loadReporting()
 // Do NOT add a `router.on('before')` hook that sets the header too -
 // XMLHttpRequest *combines* duplicate headers into "token, token", which
 // the server rejects as a mismatch (419) on every form submit.
+
+// Flash messages become toasts. Registered before `createInertiaApp` so the
+// first page's flash event is caught.
+showFlashAsToasts()
 
 // Under a nonce-based Content Security Policy the server writes the
 // request's nonce on `<meta property="csp-nonce">`. The Inertia client
