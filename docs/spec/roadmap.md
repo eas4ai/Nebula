@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: app-url-localhost-warning
+Current: analytics-plausible
 
 ## markdown-twins
 
@@ -38,7 +38,7 @@ Done when: every requirement above has a current pass receipt. `cargo test --loc
 
 Requirements: BOOT-003
 
-Delivery: on the `sudus` branch, after app-url-required. When the production check passes, `require_app_url` also looks at `APP_URL`'s host and, for a loopback name, logs a `tracing` warning naming `APP_URL` and saying emailed links, canonical links and the sitemap would point at this machine. The `boot_003_…` test captures the log with `tracing-subscriber`, added as a dev-dependency. README's `APP_URL` section and the UPGRADE.md 3.0.0 bullet mention the warning.
+Delivery: on the `sudus` branch, after app-url-required. When the production check passes, `require_app_url` also looks at `APP_URL`'s host and, for a loopback name, prints a warning to stderr naming `APP_URL` and saying emailed links, canonical links and the sitemap would point at this machine; stderr, because the log subscriber is not installed yet at that point of boot. The `boot_003_…` test runs the `nebula` binary in production and reads its stderr. README's `APP_URL` section and the UPGRADE.md 3.0.0 bullet mention the warning.
 
 Done when: every requirement above has a current pass receipt. `cargo test --locked` and `cargo clippy` pass. `README.md` and `UPGRADE.md` are updated.
 
