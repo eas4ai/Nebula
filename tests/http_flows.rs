@@ -937,11 +937,11 @@ async fn inertia_submissions_render_errors_and_303_redirects() {
 // ============================================================================
 
 /// The framework server has no static-file handler, so the kit serves its
-/// `public/` branding whitelist through explicit routes
-/// (`controllers::static_files::serve`). This drives those routes through the
-/// real router + global middleware stack, exactly as a browser requests them
-/// - and since dev and prod are the same Rust server (Vite only supplies
-/// JS/CSS via absolute dev-server URLs), one pass covers both modes.
+/// `public/` branding whitelist through `static_files::BrandingFiles`, a
+/// global middleware before the session. This drives it through the real
+/// global middleware stack, exactly as a browser requests the files - and
+/// since dev and prod are the same Rust server (Vite only supplies JS/CSS via
+/// absolute dev-server URLs), one pass covers both modes.
 #[tokio::test]
 async fn branding_statics_resolve_at_web_root() {
     let mut harness = setup().await;

@@ -26,11 +26,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    {# `use-credentials`: browsers fetch the manifest without cookies by
-       default, and a request without the session cookie mints a fresh session
-       whose Set-Cookie replaces the real one, breaking the first form's CSRF
-       pairing. #}
-    <link rel="manifest" href="/site.webmanifest" crossorigin="use-credentials" />
+    <link rel="manifest" href="/site.webmanifest" />
     {{ title }}
     {{ head }}
     {# An application script runs under the page's policy with the request's nonce:
