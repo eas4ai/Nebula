@@ -42,7 +42,7 @@ pub(crate) fn require_app_url() -> Result<(), FrameworkError> {
     // Suprnova's own boot warnings are: this runs before `Server::run`
     // installs the log subscriber, and a `tracing` event here is dropped.
     if is_loopback(&url) {
-        tracing::warn!(
+        eprintln!(
             "nebula: warning: APP_URL's host {} is a loopback address: emailed links, canonical links and the sitemap will point at this machine. Set APP_URL to the app's public address.",
             url.host_str().unwrap_or_default()
         );
