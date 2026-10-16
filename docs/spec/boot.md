@@ -15,3 +15,10 @@ Status: Agreed 2026-10-16
 Falsifier: With `APP_ENV=test` and `APP_URL` unset, `try_register_http_stack` returns an error, or the `/llms.txt` link to Home's twin is not `http://localhost:8765/index.html.md`.
 Mechanism: boot
 Status: Agreed 2026-10-16
+
+[BOOT-003] In production, when `APP_URL`'s host is a loopback name (`localhost` or a name ending in `.localhost`, an address in `127.0.0.0/8`, `::1` or `0.0.0.0`), Nebula's server MUST log a warning that names `APP_URL` and still start.
+Falsifier: With `APP_ENV=production` and `APP_URL` set to `http://localhost:8080`, `https://nebula.localhost`, `http://127.0.0.1:8080` or `http://[::1]:8080`, `try_register_http_stack` returns an error that names `APP_URL`, or logs no warning that names `APP_URL`; or, with `APP_URL=https://nebula.test`, it logs a warning that names `APP_URL`.
+Mechanism: boot
+Rationale: The developer ruled warn, not refuse, on 2026-10-16, so a production-mode smoke test on a workstation keeps working. `.env.example` sets `http://localhost:8080`.
+Status: Agreed 2026-10-16
+
