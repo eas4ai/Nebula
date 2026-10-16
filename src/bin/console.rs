@@ -3,7 +3,9 @@
 //! Per-project entry point for `db:seed`, your own `#[command]`s, and
 //! other one-shot CLI tasks. Calls `nebula::bootstrap::register()`
 //! lazily (only when a real subcommand matches), then routes argv to
-//! a registered console command.
+//! a registered console command. `register()` does not install the HTTP
+//! stack (that lives behind `.http_bootstrap` in `cmd/main.rs`), so
+//! console commands run in images that ship no built frontend assets.
 //!
 //! ```text
 //! cargo run --bin console -- db:seed
@@ -59,6 +61,8 @@ async fn main() -> ExitCode {
 
     match result {
         Ok(()) => ExitCode::SUCCESS,
-        Err(_) => ExitCode::FAILURE,
+        // A command that returned `FrameworkError::exit(code)` ends with
+        // its code; every other error ends with 1.
+        Err(error) => ExitCode::from(error.exit_code()),
     }
 }

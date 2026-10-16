@@ -4,9 +4,13 @@
 # Node
 frontend/node_modules
 frontend/dist
+frontend/bootstrap/ssr
 
 # Build outputs
 /public/assets
+
+# The Vite hot file `suprnova serve` keeps while the dev server runs.
+/public/hot
 
 # Runtime SQLite database
 database.db
@@ -19,6 +23,16 @@ database.db
 .env
 .env.local
 .env.*.local
+
+# Mail preview output (MAIL_DRIVER=file) - .eml files carry live
+# password-reset and email-verification tokens, so keep them out of
+# version control.
+storage/mail/
+
+# live:add's lock and the journal it writes while it installs - this
+# machine's state, never the project's.
+/.suprnova-live.lock
+/.suprnova-live-journal.json
 
 # AI assistant scope notes + local planning artifacts - not part of the kit
 .claude/

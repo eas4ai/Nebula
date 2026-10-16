@@ -1,10 +1,17 @@
 [package]
 name = "nebula"
-version = "2.0.1"
+version = "3.0.0"
 rust-version = "1.94.0"
 edition = "2024"
 description = "A starter kit for Suprnova"
 authors = ["eas4ai <shawn@eas4ai.com>"]
+
+# Two binaries are declared below, so `cargo run` has to be told which
+# one it means. Without `default-run` it refuses outright - it does NOT
+# fall back to the binary sharing the package name - and every wrapper
+# (`suprnova migrate`, `schedule:work`, `web:run`) fails before doing
+# any work.
+default-run = "nebula"
 
 [[bin]]
 name = "nebula"
@@ -19,7 +26,10 @@ name = "console"
 path = "src/bin/console.rs"
 
 [dependencies]
-suprnova = { git = "https://github.com/eas4ai/suprnova.git", tag = "v3.2.1" }
+# Production build shape: default features off, the eleven non-`testing`
+# defaults listed explicitly, so the binaries above never carry a test
+# seam. See the Suprnova manual, "Production build shape" (deployment.md).
+suprnova = { git = "https://github.com/eas4ai/suprnova.git", tag = "v4.1.0", default-features = false, features = ["filesystem", "database-sqlite", "database-postgres", "database-mysql", "vector-mariadb", "web-push", "localization", "magnetar-oauth", "media", "queue-sqs", "reporting-sentry"] }
 tokio = { version = "1", features = ["full"] }
 sea-orm-migration = { version = "2.0", features = ["sqlx-sqlite", "sqlx-postgres", "runtime-tokio-native-tls"] }
 sea-orm = { version = "2.0", features = ["sqlx-sqlite", "sqlx-postgres", "runtime-tokio-native-tls", "macros", "postgres-use-serial-pk"] }
@@ -31,6 +41,10 @@ validator = { version = "0.20", features = ["derive"] }
 tracing = "0.1"
 
 [dev-dependencies]
+# Turns `testing` back on for `cargo test` and every `--tests` build
+# only; it never reaches the binaries above. The suites use its
+# `*_for_test` helpers.
+suprnova = { git = "https://github.com/eas4ai/suprnova.git", tag = "v4.1.0", features = ["testing"] }
 bytes = "1.11.1"
 http-body-util = "0.1.3"
 hyper = { version = "1.10.1", features = ["full"] }

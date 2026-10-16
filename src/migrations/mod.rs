@@ -17,6 +17,13 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000003_create_remember_tokens_table::Migration),
             Box::new(m20240101_000004_add_email_verified_at_to_users::Migration),
             Box::new(m20240101_000005_create_auth_flow_tokens::Migration),
+            // Suprnova 4's database session driver reads and writes Laravel
+            // 13's `sessions` layout. This framework migration moves the
+            // table `m20240101_000002` created into that layout, keeping
+            // every session; it does nothing to a table already in it.
+            Box::new(suprnova::session::migrations::CreateSessionsTable::new(
+                suprnova::session::migrations::SessionUserKey::Integer,
+            )),
         ]
     }
 }

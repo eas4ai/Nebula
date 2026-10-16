@@ -4,20 +4,19 @@
   import { ModeWatcher } from 'mode-watcher'
   import { Alert, Button, DropdownMenu, ThemeModeButton } from 'sv5ui'
   import type { DropdownMenuItem } from 'sv5ui'
-  import type { AuthUser } from '../types/auth'
 
   let { children }: { children: Snippet } = $props()
 
   // `page` in @inertiajs/svelte 3 is a $state-backed reactive object (not a
-  // store), so plain property access stays reactive across visits.
-  const user = $derived(
-    (page.props.auth as { user?: AuthUser | null } | undefined)?.user ?? null,
-  )
+  // store), so plain property access stays reactive across visits. The
+  // shared `auth` prop is typed by `SharedProps` in the generated
+  // `types/inertia-props.ts` (from `src/props/shared.rs`).
+  const user = $derived(page.props.auth?.user ?? null)
 
   // `flash` is a first-class typed property on Inertia's Page object,
   // populated from the server-side session flash for this visit: the server
   // consumes the flash, the client keeps it for the rendered page. Its shape
-  // comes from the `flashDataType` augmentation in `types/inertia.d.ts`.
+  // is the generated `Flash` type (from `src/props/flash.rs`).
   const flashSuccess = $derived(page.flash?.success ?? null)
   const flashError = $derived(page.flash?.error ?? null)
 
@@ -59,7 +58,12 @@
   <link rel="manifest" href="/site.webmanifest" crossorigin="use-credentials" />
 </svelte:head>
 
-<ModeWatcher defaultMode="dark" />
+<!--
+  The script that sets the mode before first paint is in
+  `templates/app.html`, which receives the request's CSP nonce; the one
+  ModeWatcher would inject through the Svelte head would have none.
+-->
+<ModeWatcher defaultMode="dark" disableHeadScriptInjection />
 
 <div class="flex min-h-screen flex-col bg-surface text-on-surface">
   <header class="border-b border-outline-variant bg-surface-container-low">

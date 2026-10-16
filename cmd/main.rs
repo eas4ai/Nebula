@@ -16,6 +16,9 @@ async fn main() {
     Application::new()
         .config(config::register_all)
         .bootstrap(bootstrap::register)
+        // The global middleware and the Inertia layer, on the server path
+        // only: the console and the workers never install them.
+        .http_bootstrap(|| async { bootstrap::register_http_stack() })
         .routes(routes::register)
         .migrations::<migrations::Migrator>()
         .run()

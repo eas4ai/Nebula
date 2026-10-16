@@ -84,12 +84,15 @@ pub(crate) enum FormFailure<T> {
 }
 
 /// Parse + validate a form body through the same staged pipeline as
-/// `FormRequest::extract` (authorize → parse → per-field rules → sync
-/// cross-field hook → async cross-field hook), but hand validation
-/// failures back to the caller together with the parsed form so Inertia
-/// submissions can re-render the originating page instead of receiving
-/// the API-style 422 envelope.
-pub(crate) async fn inertia_form<T: FormRequest>(req: Request) -> Result<T, FormFailure<T>> {
+/// `FormRequest::extract` (prepare → authorize → parse → per-field rules,
+/// then the sync and async cross-field hooks, their errors merged into one
+/// bag), but hand validation failures back to the caller together with the
+/// parsed form so Inertia submissions can re-render the originating page
+/// instead of receiving the API-style 422 envelope.
+pub(crate) async fn inertia_form<T: FormRequest>(mut req: Request) -> Result<T, FormFailure<T>> {
+    if let Err(err) = T::prepare_for_validation(&mut req) {
+        return Err(FormFailure::Response(Box::new(err.into())));
+    }
     if !T::authorize(&req) {
         return Err(FormFailure::Response(Box::new(
             FrameworkError::Unauthorized.into(),
@@ -103,17 +106,25 @@ pub(crate) async fn inertia_form<T: FormRequest>(req: Request) -> Result<T, Form
         Err(err) => return Err(FormFailure::Response(Box::new(err.into()))),
     };
 
-    let errors = match form.validate() {
-        Err(errors) => ValidationErrors::from_validator(errors),
-        Ok(()) => match form.after_validation() {
-            Err(errors) => errors,
-            Ok(()) => match form.after_validation_async().await {
-                Err(errors) => errors,
-                Ok(()) => return Ok(form),
-            },
-        },
+    // As `FormRequest::extract` does since Suprnova 4.0: both hooks run
+    // after the field rules, and the response carries every error at once,
+    // keyed by the names the input used.
+    let input_key = suprnova::data::input_names::input_key::<T>;
+    let mut errors = match form.validate() {
+        Err(errors) => ValidationErrors::from_validator_keyed(errors, input_key),
+        Ok(()) => ValidationErrors::new(),
     };
-    Err(FormFailure::Invalid(Box::new(form), errors))
+    if let Err(hook_errors) = form.after_validation() {
+        errors.merge(hook_errors.rename_keys(input_key));
+    }
+    if let Err(hook_errors) = form.after_validation_async().await {
+        errors.merge(hook_errors.rename_keys(input_key));
+    }
+    if errors.is_empty() {
+        Ok(form)
+    } else {
+        Err(FormFailure::Invalid(Box::new(form), errors))
+    }
 }
 
 /// Flatten a [`ValidationErrors`] bag into the `{ field: [messages] }` JSON

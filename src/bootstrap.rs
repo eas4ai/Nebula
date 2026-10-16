@@ -29,58 +29,35 @@ use sea_orm_migration::MigratorTrait;
 
 #[allow(unused_imports)]
 use suprnova::{
-    App, Auth, AuthConfig, AuthManager, CsrfMiddleware, DB, EloquentUserProvider, FrameworkError,
-    Frontend, IncludeMiddleware, Inertia, InertiaConfig, InertiaRequestExt, InertiaSharedData,
-    Prop, SessionConfig, SessionMiddleware, bind, global_middleware, indexmap::IndexMap,
-    serde_json, singleton,
+    App, Auth, AuthConfig, AuthManager, CsrfMiddleware, DB, DevToolsConfig, EloquentUserProvider,
+    FrameworkError, Frontend, IncludeMiddleware, Inertia, InertiaConfig, InertiaRootTemplate,
+    RootShare, SecurityHeaders, SessionConfig, SessionMiddleware, bind, global_middleware,
+    singleton,
 };
 
 use crate::middleware;
 use crate::models::user::User;
 
-/// Shares the authenticated user on every Inertia response as `auth.user` -
-/// the shape `frontend/src/types/auth.ts` declares and `Layout.svelte`
-/// renders the user menu / Dashboard nav link from. Guests share
-/// `auth.user: null` so pages can branch on it without optional-chaining
-/// surprises.
+/// The document every Inertia first visit renders into: `templates/app.html`.
 ///
-/// Public so the integration-test harness (`tests/http_flows.rs`) can mirror
-/// this registration against its own server stack.
-pub struct AuthShare;
+/// The framework hands the template its parts - `title`, `head` (the CSRF
+/// tag and the Vite tags), `body` (the page data and the mount element),
+/// `lang`, `csrf_token`, `nonce`, `ssr` and the response's `view` data - and
+/// Askama checks at compile time that it names nothing else. Put the
+/// application's own head content there: a favicon, fonts, meta tags.
+#[suprnova::inertia_root(path = "app.html")]
+pub struct AppDocument;
 
-#[suprnova::__async_trait]
-impl InertiaSharedData for AuthShare {
-    async fn share(
-        &self,
-        _req: &dyn InertiaRequestExt,
-        _component: &str,
-    ) -> Result<IndexMap<String, Prop>, FrameworkError> {
-        let user = Auth::user_as::<User>().await?;
-        let mut out = IndexMap::new();
-        out.insert(
-            "auth".to_string(),
-            Prop::eager(serde_json::json!({
-                "user": user.map(|u| serde_json::json!({
-                    "id": u.id,
-                    "name": u.name.unwrap_or_else(|| "Account".to_string()),
-                    "email": u.email,
-                })),
-            })),
-        );
-        Ok(out)
-    }
-}
-
-/// Register global middleware and services
+/// Register process-wide services.
 ///
-/// Called from cmd/main.rs before `Server::from_config()`.
-/// Middleware and services registered here can use environment variables, config files, etc.
-/// Inertia asset version: the version middleware bounces clients whose
-/// cached bundle no longer matches. Bump when you ship new frontend assets
-/// (or replace with a build hash) - it reaches both the middleware and every
-/// page object, because `Inertia::install` retains its config.
-pub const INERTIA_VERSION: &str = "1.0";
-
+/// Called from `cmd/main.rs` via `.bootstrap(bootstrap::register)` and from
+/// the console binary. Every subcommand runs it, not only `serve`, so it
+/// holds only what every process needs: encryption, the database and its
+/// schema, Magnetar, the rate limiter, and the auth provider. The HTTP stack
+/// (global middleware and `Inertia::install`) lives in
+/// [`register_http_stack`], wired separately via `.http_bootstrap(...)` in
+/// `cmd/main.rs`, so a console or worker process that ships no built
+/// frontend assets still boots.
 pub async fn register() {
     // Console and server bootstrap both need Crypt before Magnetar is installed.
     suprnova::boot::initialize_crypt_or_exit();
@@ -104,51 +81,13 @@ pub async fn register() {
         .expect("Failed to initialize Magnetar");
     suprnova::rate_limit::bootstrap_default().await;
 
-    // Global middleware (runs on every request in registration order)
-    global_middleware!(middleware::LoggingMiddleware);
-
-    // Session middleware (required for authentication)
-    let session_config = SessionConfig::from_env();
-    global_middleware!(SessionMiddleware::new(session_config));
-
-    // CSRF protection (validates tokens on POST/PUT/PATCH/DELETE)
-    global_middleware!(CsrfMiddleware::new());
-
-    // Parse `?include=`/`?exclude=`/`?only=`/`?except=` and `?fields[...]=`
-    // into the per-request task-local so `#[derive(Data)]` responses,
-    // `Resource::single`, and `Prop::Lazy` resolution honour the client's
-    // requested shape out of the box. Without this, Data DTOs silently
-    // ignore include/fieldset query parameters.
-    global_middleware!(IncludeMiddleware);
-
     // Authentication: register the AuthManager (the config/auth.php analogue)
     // and a user provider so `Auth::attempt` and `Auth::user_as::<User>()`
     // resolve users. `EloquentUserProvider<User>` queries the typed model; the
-    // SessionMiddleware above persists the authenticated id across requests.
+    // session middleware persists the authenticated id across requests.
     App::singleton(AuthManager::new(AuthConfig::from_env()));
     Auth::register_provider("users", Arc::new(EloquentUserProvider::<User>::new()))
         .expect("register users provider");
-
-    // Inertia protocol layer, three middlewares in one call: the headers
-    // middleware (`Vary: X-Inertia` on every response, and an empty 200 on
-    // an Inertia visit substituted with a 303 back), the version middleware
-    // (409 + `X-Inertia-Location` when the client's asset version doesn't
-    // match INERTIA_VERSION, reflashing the session so errors survive the
-    // reload), and the 303 middleware (302 -> 303 on non-GET redirects, so
-    // a browser doesn't replay a PATCH/PUT/DELETE against the redirect
-    // target until its 20-redirect cap kills the visit).
-    //
-    // The config passed here is the default every `InertiaResponse` starts
-    // from (framework v1.3.1), so INERTIA_VERSION is the one named place to
-    // bump when you ship new assets, and the pinned frontend reaches the
-    // rendered HTML shell without `SUPRNOVA_FRONTEND` being set at runtime.
-    Inertia::install(&InertiaConfig::new().version(INERTIA_VERSION).frontend(Frontend::Svelte))
-        .expect("Inertia install failed - in production this fails closed when the frontend manifest has not been built");
-
-    // Share the authenticated user (`auth.user`) on every Inertia
-    // response so the layout can render the user menu without each
-    // handler threading the user through its own props.
-    App::register_inertia_shared(Arc::new(AuthShare));
 
     // Example: Register a trait binding with runtime config
     // bind!(dyn Database, PostgresDB::new());
@@ -156,5 +95,107 @@ pub async fn register() {
     // Example: Register a concrete singleton
     // singleton!(CacheService::new());
 
-    // Add your middleware and service registrations here
+    // Add your service registrations here
+}
+
+/// Register the global middleware chain and the Inertia layer.
+///
+/// Called on the server path, via
+/// `.http_bootstrap(|| async { bootstrap::register_http_stack() })` in
+/// `cmd/main.rs`, after [`register`], and by the `ssr:*` commands, which read
+/// the Inertia configuration installed below. Never on the console binary:
+/// `Inertia::install` fails closed in production when the built frontend
+/// manifest is missing.
+pub fn register_http_stack() {
+    try_register_http_stack()
+        .expect("HTTP stack: check the SECURITY_HEADERS settings; production also needs a built frontend manifest");
+}
+
+/// The HTTP stack, returning its errors. `tests/http_flows.rs` calls this to
+/// serve the same stack production runs.
+///
+/// Order matters: security headers outermost, so every response carries
+/// them; the session before Inertia (the version middleware re-flashes the
+/// session before it bounces a stale client); the request timeout between
+/// the Inertia layer and CSRF; CSRF after the session it reads.
+pub fn try_register_http_stack() -> Result<(), FrameworkError> {
+    // Response security headers and the per-request CSP nonce, outermost so
+    // every response is covered. `SECURITY_HEADERS` picks the preset
+    // (`balanced` when unset).
+    global_middleware!(SecurityHeaders::from_env()?);
+
+    // Global middleware (runs on every request in registration order)
+    global_middleware!(middleware::LoggingMiddleware);
+
+    // Session middleware (required for authentication). The config is
+    // cloned because the CSRF middleware below reads the same values, so
+    // the session cookie and the XSRF cookie cannot drift apart.
+    let session_config = SessionConfig::from_env();
+    global_middleware!(SessionMiddleware::new(session_config.clone()));
+
+    // Inertia protocol layer: the headers middleware (`Vary: X-Inertia`, and
+    // an empty 200 on an Inertia visit turned into a 303 back), the version
+    // middleware (409 + `X-Inertia-Location` when the client's asset version
+    // no longer matches), the 303 middleware (302 -> 303 on non-GET
+    // redirects, so a browser doesn't replay a PATCH/PUT/DELETE), the
+    // validation-redirect middleware, and, because `.error_page` is set, the
+    // error-page middleware. It sits after the session middleware because
+    // the version middleware re-flashes the session before it bounces a
+    // stale client.
+    //
+    // No asset-version override: the default hashes the Vite manifest, so
+    // each frontend build changes the version and an open tab reloads onto
+    // the new assets. The frontend is pinned so the HTML shell does not
+    // depend on `SUPRNOVA_FRONTEND` at runtime. `Inertia::install` retains
+    // this config as the default every `InertiaResponse` starts from.
+    //
+    // `.root_template` renders every first visit through `AppDocument`
+    // (`templates/app.html`). `.error_page` renders framework error
+    // responses (403, 404, 419, 500, 503) through `pages/Error.svelte`
+    // instead of the Inertia client's plain-JSON modal.
+    Inertia::install(
+        &InertiaConfig::new()
+            .frontend(Frontend::Svelte)
+            .default_title("Nebula")
+            .root_template(InertiaRootTemplate::of::<AppDocument>())
+            // Every message per field, as an array, the shape the kit's own
+            // `errors_json` sends and the pages read (`form.errors.x?.[0]`).
+            // `suprnova generate-types` reads this call and types
+            // `errorValueType` as `string[]`.
+            .with_all_errors(true)
+            // Record in local development for the Inertia DevTools browser
+            // extension. INERTIA_DEVTOOLS_ENABLED=false turns it off.
+            .devtools(DevToolsConfig::new())
+            .error_page("Error"),
+    )?;
+
+    // Request timeout: a 30-second ceiling on the time to a response; past
+    // it the request answers 503. After `Inertia::install`, so the 503
+    // renders as the error page inside the visitor's session, and before
+    // CSRF and the handlers, so it bounds their work.
+    global_middleware!(suprnova::TimeoutMiddleware::default());
+
+    // CSRF protection (validates tokens on POST/PUT/PATCH/DELETE).
+    // `with_session_config` copies the session cookie's `Secure`,
+    // `SameSite`, `Domain`, `Path` and lifetime onto the JS-readable
+    // `XSRF-TOKEN` cookie, so it works over `http://localhost` when
+    // `SESSION_SECURE=false`.
+    global_middleware!(CsrfMiddleware::new().with_session_config(&session_config));
+
+    // Parse `?include=`/`?exclude=`/`?only=`/`?except=` and `?fields[...]=`
+    // into the per-request task-local so `#[derive(Data)]` responses,
+    // `Resource::single`, and lazy `Prop` resolution honour the client's
+    // requested shape out of the box. Without this, Data DTOs silently
+    // ignore include/fieldset query parameters.
+    global_middleware!(IncludeMiddleware);
+
+    // The `root` prop on every Inertia response: the public root pages build
+    // their URLs from, so the same build runs at `/` and under a path prefix.
+    App::register_inertia_shared(Arc::new(RootShare::new()));
+
+    // The signed-in user, or none, on every page under `auth`, read from the
+    // request's session each time a response sends it. `SharedData` in
+    // `src/props/shared.rs` types it for `suprnova generate-types`.
+    App::inertia_share_lazy("auth", crate::props::shared::Auth::current);
+    Ok(())
 }

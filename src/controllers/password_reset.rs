@@ -160,7 +160,11 @@ pub async fn reset(req: Request) -> Response {
                 "Your password has been reset. Log in with your new password.",
             )
             .into(),
-        Err(_) => {
+        // 400 is the flow's answer for an invalid, consumed, or expired
+        // token. Any other error is not about the link: a 500 can mean the
+        // password already changed but the retry job that revokes the old
+        // sessions could not be queued, and that must not read as a bad link.
+        Err(err) if err.status_code() == 400 => {
             let mut errors = ValidationErrors::new();
             errors.add(
                 "token",
@@ -168,5 +172,6 @@ pub async fn reset(req: Request) -> Response {
             );
             render_reset(&ctx, &form.token, errors).await
         }
+        Err(err) => Err(err.into()),
     }
 }

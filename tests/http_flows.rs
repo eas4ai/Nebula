@@ -52,12 +52,10 @@ use serde_json::{Value, json};
 use suprnova::auth::AuthConfig;
 use suprnova::mail::{Mail, MailFake};
 use suprnova::{
-    App, Auth, AuthManager, CsrfMiddleware, EloquentUserProvider, IncludeMiddleware,
-    Inertia303Middleware, MiddlewareRegistry, MustVerifyEmail, SessionConfig, SessionMiddleware,
+    App, Auth, AuthManager, EloquentUserProvider, MiddlewareRegistry, MustVerifyEmail,
     handle_request,
 };
 
-use nebula::middleware::LoggingMiddleware;
 use nebula::models::user::User;
 
 /// Held-for-the-test guard: keeps the SeaORM connection + auth wiring
@@ -87,7 +85,10 @@ async fn setup() -> Harness {
     let lock = common::TEST_LOCK.lock().await;
 
     // SAFETY: every test in this file is serialized behind `common::TEST_LOCK`.
+    // An unset `APP_ENV` is production since Suprnova 4.0, which would make
+    // `Inertia::install` demand a built frontend manifest.
     unsafe {
+        std::env::set_var("APP_ENV", "test");
         std::env::set_var("MAIL_FROM", "test@nebula.test");
         std::env::set_var("APP_URL", "http://nebula.test");
     }
@@ -102,12 +103,6 @@ async fn setup() -> Harness {
     Auth::register_provider("users", Arc::new(EloquentUserProvider::<User>::new()))
         .expect("register users provider");
 
-    // Mirror bootstrap's `App::register_inertia_shared(Arc::new(AuthShare))`
-    // so authenticated page renders carry the shared `auth.user` prop here
-    // too. Re-registering across tests is fine - the provider slot is a
-    // replace-on-write.
-    App::register_inertia_shared(Arc::new(nebula::bootstrap::AuthShare));
-
     Harness {
         _lock: lock,
         mail,
@@ -116,25 +111,20 @@ async fn setup() -> Harness {
 }
 
 impl Harness {
-    /// Spawn the kit's real app - `nebula::routes::register()` behind the same
-    /// global middleware stack `bootstrap::register()` installs - on an
+    /// Spawn the kit's real app - `nebula::routes::register()` behind the
+    /// global middleware stack `bootstrap::try_register_http_stack()` installs - on an
     /// ephemeral loopback listener whose service fn is
     /// `suprnova::handle_request`. The accept loop's abort handle is stored on
     /// the harness and aborted on drop, so the server's lifetime is the test's.
     async fn spawn_app(&mut self) -> SocketAddr {
         let router = Arc::new(nebula::routes::register());
-        let registry = Arc::new(
-            MiddlewareRegistry::new()
-                .append(LoggingMiddleware)
-                .append(SessionMiddleware::new(SessionConfig::from_env()))
-                .append(CsrfMiddleware::new())
-                .append(IncludeMiddleware)
-                // Mirrors bootstrap's `Inertia::install`: upgrade Inertia
-                // PUT/PATCH/DELETE 302s to 303 so browsers don't replay the
-                // verb against the redirect target. (The version middleware
-                // is omitted - these tests never send `X-Inertia-Version`.)
-                .append(Inertia303Middleware::new()),
-        );
+        // Serve the HTTP stack production runs: clear what an earlier test
+        // registered (the tests are serialized behind `TEST_LOCK`), run the
+        // kit's own `try_register_http_stack`, and take the result. It also
+        // installs Inertia and the `auth` / `root` shared props.
+        suprnova::middleware::clear_global_middleware_for_test();
+        nebula::bootstrap::try_register_http_stack().expect("HTTP stack");
+        let registry = Arc::new(MiddlewareRegistry::from_global());
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
@@ -855,7 +845,7 @@ async fn inertia_submissions_render_errors_and_303_redirects() {
     assert_eq!(resp.status, 302, "Inertia POST login: {}", resp.body);
     assert_eq!(resp.location(), "/dashboard");
 
-    // The shared `auth.user` prop (AuthShare in bootstrap.rs) rides every
+    // The shared `auth.user` prop (`props::shared::Auth`) rides every
     // page render once authenticated - it is what the layout's user menu
     // and Dashboard nav link key off.
     let resp = client.get("/dashboard").await;

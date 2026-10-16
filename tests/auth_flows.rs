@@ -71,7 +71,9 @@ async fn setup() -> Harness {
     let lock = common::TEST_LOCK.lock().await;
 
     // SAFETY: every test in this file is serialized behind `common::TEST_LOCK`.
+    // An unset `APP_ENV` is production since Suprnova 4.0.
     unsafe {
+        std::env::set_var("APP_ENV", "test");
         std::env::set_var("MAIL_FROM", "test@nebula.test");
         std::env::set_var("APP_URL", "http://nebula.test");
     }

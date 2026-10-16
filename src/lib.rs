@@ -6,4 +6,5 @@ pub mod controllers;
 pub mod middleware;
 pub mod migrations;
 pub mod models;
+pub mod props;
 pub mod routes;

@@ -19,8 +19,8 @@ production-shaped account story on day one:
 - **A branded frontend** - Inertia 3 + Svelte 5 (runes) + sv5ui, dark by
   default, with the Nebula icon set served at the web root.
 
-The backend is Rust on Suprnova 3.2.1; the frontend is a Vite + Tailwind v4 SPA
-bridged over Inertia. Everything below is wired and tested - clone it,
+The backend is Rust on Suprnova 4.1.0; the frontend is a Vite + Tailwind v4 SPA
+bridged over Inertia, with server-side rendering for first visits. Everything below is wired and tested - clone it,
 rename it, build your app on top.
 
 ### Part of the Suprnova kit family
@@ -36,7 +36,7 @@ in the [Suprnova manual](https://github.com/eas4ai/suprnova/blob/main/manual/sta
 You'll need Rust (stable), Node 20+, and the Suprnova CLI:
 
 ```bash
-cargo install --git https://github.com/eas4ai/suprnova.git --tag v3.2.1 suprnova-cli
+cargo install --git https://github.com/eas4ai/suprnova.git --tag v4.1.0 suprnova-cli
 ```
 
 Then:
@@ -52,7 +52,8 @@ suprnova serve
 backend on `http://localhost:8080` (migrations run automatically against
 the SQLite database) and Vite on `:5173`, and watches both. Open
 **http://localhost:8080** - the page origin is always the Rust server;
-Vite only supplies JS/CSS.
+Vite supplies JS/CSS and renders first visits on the server through
+`frontend/src/ssr.ts`.
 
 Prefer raw cargo? `cargo run --bin nebula` runs the backend
 alone; pair it with `npm run dev` in `frontend/`.
@@ -143,19 +144,38 @@ Built JS/CSS bundles use a separate `/assets/{*path}` route backed by
 Suprnova's `StaticFiles` handler. Other root-level public files still
 require the explicit whitelist and route described above.
 
-**Head and meta.** Inertia's Svelte adapter uses Svelte's native
-`<svelte:head>`. The app-wide defaults (title, icon links, manifest) are
-in `frontend/src/lib/Layout.svelte`; any page can override the title with
-its own `<svelte:head><title>` block, as `Home.svelte` does.
+**Head and meta.** First visits render through the root template
+`templates/app.html`; put document-level head content there. It also holds
+the script that sets light or dark mode before first paint, because it
+receives the request's Content-Security-Policy nonce. Inertia's Svelte
+adapter uses Svelte's native `<svelte:head>`: the app-wide defaults (title,
+icon links, manifest) are in `frontend/src/lib/Layout.svelte`, and any page
+can override the title with its own `<svelte:head><title>` block, as
+`Home.svelte` does.
+
+**Security headers.** Every response carries security headers, and HTML
+responses carry a Content-Security-Policy with a fresh nonce
+(`SECURITY_HEADERS=balanced`, the default). An inline `<script>` runs only
+with that nonce; see the commented example in `templates/app.html`.
+
+**Shared props.** `src/props/shared.rs` defines the `auth` prop every page
+receives, and `src/props/flash.rs` the shape of `page.flash`. After changing
+a struct that derives `InertiaProps`, run `suprnova generate-types` (`suprnova
+serve` does it for you) to refresh `frontend/src/types/inertia-props.ts`.
 
 ## Production
 
-Build the frontend with `cd frontend && npm run build`, then build the
-server from the repository root with `cargo build --release`. Deploy
-`public/assets/` alongside the server binary.
+Build the frontend with `cd frontend && npm run build && npm run build:ssr`,
+then build the server from the repository root with
+`cargo build --release`. Deploy `public/assets/` alongside the server
+binary, and run the SSR worker as a second process from `frontend/`:
+`node bootstrap/ssr/ssr.js` (it listens on `127.0.0.1:13714` and imports
+packages from `frontend/node_modules`). Without the worker, pages render in
+the browser.
 
-Set `APP_ENV=production`, `APP_DEBUG=false`, a generated `APP_KEY`, and
-the public `APP_URL`. Configure a delivering mail driver such as SMTP;
+Set `APP_ENV=production` (an unset `APP_ENV` is production too),
+`APP_DEBUG=false`, a generated `APP_KEY`, the public `APP_URL`, and
+`SESSION_SECURE=true`. Configure a delivering mail driver such as SMTP;
 production boot rejects the development `log` driver.
 
 Set `RATE_LIMIT_DRIVER=redis` and `RATE_LIMIT_REDIS_URL` to share
@@ -179,7 +199,8 @@ Two complementary suites cover the account flows end-to-end:
   assertions read the persisted rows back through the same user provider
   the app registers.
 - **`tests/http_flows.rs` (request path)** drives the kit's *wiring* -
-  the real route table, the guest/auth/verified middleware gates,
+  the real route table behind the HTTP stack `bootstrap::try_register_http_stack()`
+  installs, the guest/auth/verified middleware gates,
   session-cookie continuity, CSRF round-trips, and the real
   PATCH/PUT/DELETE verbs - through Suprnova's `handle_request` over a
   loopback socket, exactly like the framework's own integration
@@ -190,4 +211,4 @@ second points at HTTP wiring.
 
 ## Upgrading
 
-For the Suprnova 3.2.1 upgrade, follow [UPGRADE.md](UPGRADE.md), including production configuration and rollback steps.
+For the Suprnova 4.1.0 upgrade (Nebula 3.0.0), follow [UPGRADE.md](UPGRADE.md), including production configuration and rollback steps.

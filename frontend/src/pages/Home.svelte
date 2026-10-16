@@ -1,15 +1,12 @@
 <script lang="ts">
   import { Link, page } from '@inertiajs/svelte'
   import type { HomeProps } from '../types/inertia-props'
-  import type { AuthUser } from '../types/auth'
 
   let { title, message }: HomeProps = $props()
 
   // Same auth-prop read as Layout: `page` is a $state-backed reactive object
   // in @inertiajs/svelte 3, so plain property access stays reactive.
-  const user = $derived(
-    (page.props.auth as { user?: AuthUser | null } | undefined)?.user ?? null,
-  )
+  const user = $derived(page.props.auth?.user ?? null)
 </script>
 
 <svelte:head>
