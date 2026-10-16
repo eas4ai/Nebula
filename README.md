@@ -261,6 +261,32 @@ To make it yours, edit `SUMMARY`, set `APP_NAME` and `APP_URL`, and
 replace `SOCIAL_IMAGE` (the 512 px icon) with a 1200x630 card; then
 switch the X card in `seo::register` to `TwitterCardType::SummaryLargeImage`.
 
+## Analytics
+
+Nebula can send page views to a [Plausible](https://plausible.io)
+instance. It is off until you set both:
+
+```env
+PLAUSIBLE_SRC=https://plausible.example.com/js/script.js
+PLAUSIBLE_DOMAIN=example.com
+```
+
+`PLAUSIBLE_SRC` is the script URL on your instance; `PLAUSIBLE_DOMAIN` is the
+site name you registered there. Every page then loads the script with the
+request's CSP nonce (`templates/app.html`). A `PLAUSIBLE_SRC` that is not an
+absolute `http://` or `https://` URL stops the boot.
+
+Plausible's script posts page views to its own origin, which the default
+Content-Security-Policy blocks, so Nebula adds that origin to the policy's
+`connect-src` when analytics is on (`src/analytics.rs`). Suprnova has no
+way yet to extend a preset policy, so `src/analytics.rs` carries a copy of
+the strict and balanced policies; a test compares them with the framework's
+own, so an upgrade that changes them fails the tests instead of shipping a
+stale policy.
+
+Plausible sets no cookies, so it needs no consent banner. A tool that sets
+cookies would change that.
+
 ## Production
 
 Build the frontend with `cd frontend && npm run build && npm run build:ssr`,
