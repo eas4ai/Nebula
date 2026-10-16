@@ -115,8 +115,9 @@ pub fn register_http_stack() {
 /// serve the same stack production runs.
 ///
 /// Order matters: security headers outermost, so every response carries
-/// them; the Markdown twins, `/llms.txt` and the branding files before the
-/// session, so those publicly cacheable responses never carry a cookie; the session before
+/// them; the Markdown twins, `/llms.txt`, the branding files, `/robots.txt`
+/// and `/sitemap.xml` before the session, so those publicly cacheable
+/// responses never carry a cookie; the session before
 /// Inertia (the version middleware re-flashes the session before it bounces
 /// a stale client); the request timeout between the Inertia layer and CSRF;
 /// CSRF after the session it reads.
@@ -142,6 +143,11 @@ pub fn try_register_http_stack() -> Result<(), FrameworkError> {
     // The favicon set and the web app manifest at the web root, publicly
     // cached for a day, so before the session for the same reason.
     global_middleware!(crate::controllers::static_files::BrandingFiles);
+
+    // `/robots.txt` and `/sitemap.xml`, public for an hour, before the
+    // session for the same reason (`src/seo.rs`).
+    global_middleware!(crate::seo::RobotsTxt);
+    global_middleware!(crate::seo::Sitemap);
 
     // Session middleware (required for authentication). The config is
     // cloned because the CSRF middleware below reads the same values, so
@@ -213,5 +219,9 @@ pub fn try_register_http_stack() -> Result<(), FrameworkError> {
     // request's session each time a response sends it. `SharedData` in
     // `src/props/shared.rs` types it for `suprnova generate-types`.
     App::inertia_share_lazy("auth", crate::props::shared::Auth::current);
+
+    // The head every page starts from (canonical link, description, Open
+    // Graph and X card) and the error pages' robots rule: `src/seo.rs`.
+    crate::seo::register();
     Ok(())
 }

@@ -1,6 +1,6 @@
 use suprnova::{InertiaProps, Request, Response, handler, inertia_response};
 
-use crate::markdown;
+use crate::{markdown, seo};
 
 #[derive(InertiaProps)]
 pub struct HomeProps {
@@ -31,5 +31,6 @@ pub async fn index(req: Request) -> Response {
     markdown::advertise(markdown::HOME)?;
     // Typed, so `suprnova generate-types` pairs the page with `HomeProps`.
     let props: HomeProps = content();
+    seo::describe_home(&props.title, &props.message)?;
     inertia_response!(&req, "Home", props)
 }

@@ -189,6 +189,8 @@ struct Client {
     inertia_version: Option<String>,
     /// The `Host` header every request sends.
     host: String,
+    /// An `Accept` header to send, as a browser's `text/html`.
+    accept: Option<String>,
 }
 
 impl Client {
@@ -198,6 +200,7 @@ impl Client {
             cookies: HashMap::new(),
             inertia_version: None,
             host: "nebula.test".to_string(),
+            accept: None,
         }
     }
 
@@ -282,6 +285,9 @@ impl Client {
             .header("Content-Length", payload.len().to_string());
         if !payload.is_empty() {
             builder = builder.header("Content-Type", "application/json");
+        }
+        if let Some(accept) = &self.accept {
+            builder = builder.header("Accept", accept.as_str());
         }
         if inertia {
             builder = builder.header("X-Inertia", "true");
@@ -1729,6 +1735,8 @@ async fn seo_005_error_pages_are_not_indexed() {
     let mut harness = setup().await;
     let mut client = Client::new(harness.spawn_app().await);
 
+    // A crawler asks for HTML; without it the 404 is plain text.
+    client.accept = Some("text/html".to_string());
     let missing = client.get("/no-such-page").await;
     assert_eq!(missing.status, 404);
     assert!(
