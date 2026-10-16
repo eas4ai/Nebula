@@ -183,6 +183,8 @@ impl Resp {
 struct Client {
     addr: SocketAddr,
     cookies: HashMap<String, String>,
+    /// The asset version Inertia visits send, once a 409 has named it.
+    inertia_version: Option<String>,
 }
 
 impl Client {
@@ -190,11 +192,33 @@ impl Client {
         Self {
             addr,
             cookies: HashMap::new(),
+            inertia_version: None,
         }
     }
 
     async fn get(&mut self, path: &str) -> Resp {
         self.request("GET", path, None, false).await
+    }
+
+    async fn head(&mut self, path: &str) -> Resp {
+        self.request("HEAD", path, None, false).await
+    }
+
+    /// An Inertia visit (`X-Inertia: true`), as the client sends when it
+    /// navigates. Like the client, it learns the asset version from the 409
+    /// the version middleware answers, then retries once.
+    async fn inertia_get(&mut self, path: &str) -> Resp {
+        let resp = self.request("GET", path, None, true).await;
+        if resp.status != 409 {
+            return resp;
+        }
+        let version = resp
+            .headers
+            .get("x-inertia-version")
+            .cloned()
+            .unwrap_or_else(|| panic!("a 409 names the asset version: {:?}", resp.headers));
+        self.inertia_version = Some(version);
+        self.request("GET", path, None, true).await
     }
 
     async fn post_json(&mut self, path: &str, body: Value) -> Resp {
@@ -256,6 +280,9 @@ impl Client {
         }
         if inertia {
             builder = builder.header("X-Inertia", "true");
+            if let Some(version) = &self.inertia_version {
+                builder = builder.header("X-Inertia-Version", version.as_str());
+            }
         }
         if !self.cookies.is_empty() {
             let jar = self
@@ -1011,4 +1038,342 @@ async fn frontend_assets_stay_within_public_route_boundary() {
         "asset URLs cannot escape their prefix"
     );
     assert_eq!(missing.status, 404, "missing assets stay a 404");
+}
+
+// ============================================================================
+// 8. Markdown twins and /llms.txt, for crawlers that do not run JavaScript.
+//    Each test name starts with the number of the requirement it checks
+//    (`twin_<nnn>_…`), so keep the names.
+// ============================================================================
+
+/// The type `suprnova-markdown` serves twins with.
+const MARKDOWN: &str = "text/markdown; charset=utf-8";
+/// The type `/llms.txt` answers with.
+const PLAIN: &str = "text/plain; charset=utf-8";
+/// The cache policy of twins and `/llms.txt`: public for an hour.
+const PUBLIC_HOUR: &str = "public, max-age=3600";
+
+fn header<'a>(resp: &'a Resp, name: &str) -> Option<&'a str> {
+    resp.headers.get(name).map(String::as_str)
+}
+
+/// The `<link>` tags inside the document's `<head>`, as written (each
+/// starts with `link `). The page data repeats the head JSON-escaped, and
+/// that copy is not a tag.
+fn head_links(html: &str) -> Vec<&str> {
+    let head = html.split("</head>").next().unwrap_or("");
+    head.split('<')
+        .filter(|tag| tag.starts_with("link "))
+        .collect()
+}
+
+/// The parsed page of an Inertia visit.
+fn inertia_page(resp: &Resp) -> Value {
+    assert_eq!(resp.status, 200, "Inertia visit: {}", resp.body);
+    serde_json::from_str(&resp.body)
+        .unwrap_or_else(|e| panic!("an Inertia visit answers JSON ({e}): {}", resp.body))
+}
+
+#[tokio::test]
+async fn twin_001_home_twin_answers_markdown_headers() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    let twin = client.get("/index.html.md").await;
+    assert_eq!(
+        twin.status, 200,
+        "GET /index.html.md must serve the twin: {}",
+        twin.body
+    );
+    assert_eq!(header(&twin, "content-type"), Some(MARKDOWN));
+    assert_eq!(header(&twin, "x-robots-tag"), Some("noindex"));
+    assert_eq!(header(&twin, "cache-control"), Some(PUBLIC_HOUR));
+}
+
+#[tokio::test]
+async fn twin_002_head_matches_get() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    let get = client.get("/index.html.md").await;
+    let head = client.head("/index.html.md").await;
+    assert_eq!(
+        head.status, get.status,
+        "HEAD and GET /index.html.md differ in status"
+    );
+    for name in ["content-type", "x-robots-tag", "cache-control"] {
+        assert_eq!(
+            header(&head, name),
+            header(&get, name),
+            "HEAD and GET /index.html.md differ in {name}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn twin_003_query_string_keeps_the_twin() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    let plain = client.get("/index.html.md").await;
+    let tagged = client.get("/index.html.md?utm_source=test").await;
+    assert_eq!(
+        tagged.status, plain.status,
+        "a query string changed the status"
+    );
+    assert_eq!(tagged.body, plain.body, "a query string changed the body");
+}
+
+#[tokio::test]
+async fn twin_004_twin_carries_the_home_text() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    let page = inertia_page(&client.inertia_get("/").await);
+    let title = page["props"]["title"]
+        .as_str()
+        .expect("Home has a title prop");
+    let message = page["props"]["message"]
+        .as_str()
+        .expect("Home has a message prop");
+
+    let twin = client.get("/index.html.md").await;
+    assert!(
+        twin.body.contains(title),
+        "the twin lacks Home's title {title:?}: {}",
+        twin.body
+    );
+    assert!(
+        twin.body.contains(message),
+        "the twin lacks Home's message {message:?}: {}",
+        twin.body
+    );
+}
+
+/// A guard: it also passes before the twins exist. It catches a later
+/// source that answers for more than the public page list.
+#[tokio::test]
+async fn twin_005_only_listed_pages_have_twins() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    for path in [
+        "/index.md",
+        "/index.html",
+        "/index.html.md/",
+        "/login.md",
+        "/dashboard.md",
+        "/nope.md",
+    ] {
+        let resp = client.get(path).await;
+        assert_eq!(resp.status, 404, "{path} must not be served");
+        assert_ne!(
+            header(&resp, "content-type"),
+            Some(MARKDOWN),
+            "{path} answered Markdown"
+        );
+    }
+}
+
+#[tokio::test]
+async fn twin_006_only_get_and_head_are_served() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    // A page visit first, so the POSTs carry a valid CSRF token and reach
+    // whatever would answer them.
+    assert_eq!(client.get("/login").await.status, 200);
+
+    let post = client.post_json("/index.html.md", json!({})).await;
+    assert_ne!(
+        header(&post, "content-type"),
+        Some(MARKDOWN),
+        "POST /index.html.md was served as the twin"
+    );
+
+    let post = client.post_json("/llms.txt", json!({})).await;
+    let served = post.status == 200
+        && header(&post, "content-type") == Some(PLAIN)
+        && post.body.contains("## Pages");
+    assert!(
+        !served,
+        "POST /llms.txt was served as the index: {}",
+        post.body
+    );
+}
+
+/// Twins and `/llms.txt` are public for an hour, so a shared cache must
+/// never store a visitor's cookie with them.
+#[tokio::test]
+async fn twin_007_no_cookie_on_twins_or_the_index() {
+    let mut harness = setup().await;
+    let addr = harness.spawn_app().await;
+
+    let mut visitor = Client::new(addr);
+    assert_eq!(visitor.get("/login").await.status, 200);
+    assert!(
+        visitor.cookies.contains_key("XSRF-TOKEN"),
+        "a page visit starts a session: {:?}",
+        visitor.cookies
+    );
+
+    for path in ["/index.html.md", "/llms.txt"] {
+        for method in ["GET", "HEAD"] {
+            let resp = Client::new(addr).request(method, path, None, false).await;
+            assert!(
+                !resp.headers.contains_key("set-cookie"),
+                "{method} {path} without a session set a cookie: {:?}",
+                resp.headers
+            );
+            let resp = visitor.request(method, path, None, false).await;
+            assert!(
+                !resp.headers.contains_key("set-cookie"),
+                "{method} {path} with a session set a cookie: {:?}",
+                resp.headers
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn twin_008_security_headers_cover_twins_and_the_index() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    for path in ["/index.html.md", "/llms.txt"] {
+        let resp = client.get(path).await;
+        assert_eq!(
+            header(&resp, "x-content-type-options"),
+            Some("nosniff"),
+            "GET {path} lacks the security headers"
+        );
+    }
+}
+
+#[tokio::test]
+async fn twin_009_llms_txt_answers_plain_text() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    for method in ["GET", "HEAD"] {
+        let resp = client.request(method, "/llms.txt", None, false).await;
+        assert_eq!(
+            resp.status, 200,
+            "{method} /llms.txt must serve the index: {}",
+            resp.body
+        );
+        assert_eq!(
+            header(&resp, "content-type"),
+            Some(PLAIN),
+            "{method} /llms.txt"
+        );
+        assert_eq!(
+            header(&resp, "cache-control"),
+            Some(PUBLIC_HOUR),
+            "{method} /llms.txt"
+        );
+        assert_eq!(
+            header(&resp, "x-robots-tag"),
+            None,
+            "{method} /llms.txt must stay indexable"
+        );
+    }
+}
+
+#[tokio::test]
+async fn twin_010_llms_txt_lists_the_twins() {
+    let mut harness = setup().await;
+    // SAFETY: serialized behind `common::TEST_LOCK`, which `setup` holds,
+    // and set before the server starts. `setup` sets `APP_URL`.
+    unsafe {
+        std::env::set_var("APP_NAME", "Nebula");
+    }
+    let mut client = Client::new(harness.spawn_app().await);
+
+    let index = client.get("/llms.txt").await;
+    let lines: Vec<&str> = index.body.lines().collect();
+    assert!(
+        lines.contains(&"# Nebula"),
+        "no APP_NAME heading: {}",
+        index.body
+    );
+    assert!(
+        lines.iter().any(|l| l.starts_with("> ")),
+        "no summary line: {}",
+        index.body
+    );
+    assert!(
+        lines.contains(&"## Pages"),
+        "no Pages heading: {}",
+        index.body
+    );
+    assert!(
+        lines.contains(&"- [Home](http://nebula.test/index.html.md)"),
+        "no absolute link to Home's twin: {}",
+        index.body
+    );
+}
+
+#[tokio::test]
+async fn twin_011_trailing_slash_in_app_url() {
+    let mut harness = setup().await;
+    // SAFETY: as in `twin_010_llms_txt_lists_the_twins`. The next test's
+    // `setup` sets `APP_URL` back.
+    unsafe {
+        std::env::set_var("APP_URL", "http://nebula.test/");
+    }
+    let mut client = Client::new(harness.spawn_app().await);
+
+    let index = client.get("/llms.txt").await;
+    assert!(
+        !index.body.contains("//index.html.md"),
+        "a trailing slash in APP_URL doubled the slash: {}",
+        index.body
+    );
+}
+
+#[tokio::test]
+async fn twin_012_first_visit_head_names_the_twin() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    let home = client.get("/").await;
+    assert_eq!(home.status, 200, "{}", home.body);
+    let link = head_links(&home.body)
+        .into_iter()
+        .find(|tag| tag.contains("href=\"/index.html.md\""))
+        .unwrap_or_else(|| panic!("GET / has no twin link in <head>: {}", home.body));
+    assert!(link.contains("rel=\"alternate\""), "{link}");
+    assert!(link.contains("type=\"text/markdown\""), "{link}");
+
+    let login = client.get("/login").await;
+    assert_eq!(login.status, 200, "{}", login.body);
+    let markdown_links: Vec<&str> = head_links(&login.body)
+        .into_iter()
+        .filter(|tag| tag.contains("text/markdown"))
+        .collect();
+    assert!(
+        markdown_links.is_empty(),
+        "GET /login names a twin: {markdown_links:?}"
+    );
+}
+
+#[tokio::test]
+async fn twin_013_head_prop_names_the_twin() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    let home = inertia_page(&client.inertia_get("/").await);
+    let head = home["props"]["head"].to_string();
+    assert!(
+        head.contains("/index.html.md") && head.contains("text/markdown"),
+        "the head prop of an Inertia visit to / lacks the twin link: {head}"
+    );
+
+    let login = inertia_page(&client.inertia_get("/login").await);
+    let head = login["props"]["head"].to_string();
+    assert!(
+        !head.contains("text/markdown"),
+        "the head prop of an Inertia visit to /login names a twin: {head}"
+    );
 }
