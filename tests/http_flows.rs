@@ -187,6 +187,8 @@ struct Client {
     cookies: HashMap<String, String>,
     /// The asset version Inertia visits send, once a 409 has named it.
     inertia_version: Option<String>,
+    /// The `Host` header every request sends.
+    host: String,
 }
 
 impl Client {
@@ -195,6 +197,7 @@ impl Client {
             addr,
             cookies: HashMap::new(),
             inertia_version: None,
+            host: "nebula.test".to_string(),
         }
     }
 
@@ -275,7 +278,7 @@ impl Client {
         let mut builder = hyper::Request::builder()
             .method(method)
             .uri(path)
-            .header("Host", "nebula.test")
+            .header("Host", self.host.as_str())
             .header("Content-Length", payload.len().to_string());
         if !payload.is_empty() {
             builder = builder.header("Content-Type", "application/json");
@@ -1523,4 +1526,360 @@ async fn static_004_only_listed_files_for_get_and_head() {
     let post = client.post_json("/favicon.ico", json!({})).await;
     let served = post.status == 200 && header(&post, "content-type") == Some("image/x-icon");
     assert!(!served, "POST /favicon.ico was served the file");
+}
+
+// ============================================================================
+// 10. Search and social metadata: the head tags, JSON-LD, /robots.txt and
+//     /sitemap.xml. Each test name starts with the number of the requirement
+//     it checks (`seo_<nnn>_…`), so keep the names.
+// ============================================================================
+
+/// The tags of one element kind (`meta`, `link`, `script`) inside the
+/// document's `<head>`, as written.
+fn head_tags<'a>(html: &'a str, element: &str) -> Vec<&'a str> {
+    let head = html.split("</head>").next().unwrap_or("");
+    let prefix = format!("{element} ");
+    head.split('<')
+        .filter(|tag| tag.starts_with(&prefix))
+        .collect()
+}
+
+/// The value of attribute `name` in a tag, as written.
+fn attr<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
+    let key = format!(" {name}=\"");
+    let start = tag.find(&key)? + key.len();
+    let end = tag[start..].find('"')?;
+    Some(&tag[start..start + end])
+}
+
+/// The `content` of every head `<meta>` whose `name` or `property` is `key`.
+fn meta(html: &str, key: &str) -> Vec<String> {
+    head_tags(html, "meta")
+        .into_iter()
+        .filter(|tag| attr(tag, "name") == Some(key) || attr(tag, "property") == Some(key))
+        .filter_map(|tag| attr(tag, "content").map(str::to_string))
+        .collect()
+}
+
+/// Whether the head has a robots meta tag that forbids indexing.
+fn forbids_indexing(html: &str) -> bool {
+    meta(html, "robots")
+        .iter()
+        .any(|content| content.contains("noindex") || content.trim() == "none")
+}
+
+/// Every JSON-LD block in the head, parsed.
+fn json_ld(html: &str) -> Vec<Value> {
+    let head = html.split("</head>").next().unwrap_or("");
+    head.split("<script")
+        .skip(1)
+        .filter(|chunk| chunk.contains("application/ld+json"))
+        .filter_map(|chunk| {
+            let body = chunk.split_once('>')?.1.split("</script>").next()?;
+            serde_json::from_str(body).ok()
+        })
+        .collect()
+}
+
+/// A visitor who registered and is signed in, not yet verified.
+async fn signed_in(addr: SocketAddr, email: &str) -> Client {
+    let mut client = Client::new(addr);
+    assert_eq!(client.get("/register").await.status, 200);
+    let resp = client
+        .post_json(
+            "/register",
+            json!({
+                "name": "Ada Lovelace",
+                "email": email,
+                "password": "supersecret",
+                "password_confirmation": "supersecret",
+            }),
+        )
+        .await;
+    assert_eq!(resp.status, 302, "register must redirect: {}", resp.body);
+    client
+}
+
+#[tokio::test]
+async fn seo_001_canonical_link_comes_from_app_url() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    client.host = "evil.example".to_string();
+    let login = client.get("/login?utm_source=x").await;
+    assert_eq!(login.status, 200, "{}", login.body);
+    let canonical: Vec<&str> = head_tags(&login.body, "link")
+        .into_iter()
+        .filter(|tag| attr(tag, "rel") == Some("canonical"))
+        .filter_map(|tag| attr(tag, "href"))
+        .collect();
+    assert_eq!(
+        canonical,
+        ["http://nebula.test/login"],
+        "canonical of /login"
+    );
+
+    client.host = "nebula.test".to_string();
+    let home = client.get("/").await;
+    let canonical: Vec<&str> = head_tags(&home.body, "link")
+        .into_iter()
+        .filter(|tag| attr(tag, "rel") == Some("canonical"))
+        .filter_map(|tag| attr(tag, "href"))
+        .collect();
+    assert_eq!(canonical, ["http://nebula.test/"], "canonical of /");
+}
+
+#[tokio::test]
+async fn seo_002_every_page_has_a_description() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    let page = inertia_page(&client.inertia_get("/").await);
+    let message = page["props"]["message"]
+        .as_str()
+        .expect("Home has a message prop");
+    let home = client.get("/").await;
+    assert!(
+        meta(&home.body, "description").iter().any(|c| c == message),
+        "/ lacks the description {message:?}: {:?}",
+        meta(&home.body, "description")
+    );
+
+    let login = client.get("/login").await;
+    assert!(
+        meta(&login.body, "description")
+            .iter()
+            .any(|c| c == nebula::markdown::SUMMARY),
+        "/login lacks the SUMMARY description: {:?}",
+        meta(&login.body, "description")
+    );
+}
+
+#[tokio::test]
+async fn seo_003_open_graph_and_x_card() {
+    let mut harness = setup().await;
+    // SAFETY: serialized behind `common::TEST_LOCK`, which `setup` holds,
+    // and set before the server starts. `setup` sets `APP_URL`.
+    unsafe {
+        std::env::set_var("APP_NAME", "Nebula");
+    }
+    let mut client = Client::new(harness.spawn_app().await);
+
+    for path in ["/", "/login"] {
+        let html = client.get(path).await.body;
+        for (key, expected) in [
+            ("og:site_name", "Nebula"),
+            ("og:type", "website"),
+            ("og:image", "http://nebula.test/android-chrome-512x512.png"),
+            ("twitter:card", "summary"),
+        ] {
+            assert!(
+                meta(&html, key).iter().any(|c| c == expected),
+                "{path}: {key} is not {expected:?}: {:?}",
+                meta(&html, key)
+            );
+        }
+    }
+
+    let page = inertia_page(&client.inertia_get("/").await);
+    let title = page["props"]["title"]
+        .as_str()
+        .expect("Home has a title prop");
+    let home = client.get("/").await;
+    assert!(
+        meta(&home.body, "og:title").iter().any(|c| c == title),
+        "/ lacks og:title {title:?}: {:?}",
+        meta(&home.body, "og:title")
+    );
+}
+
+#[tokio::test]
+async fn seo_004_only_home_is_indexable() {
+    let mut harness = setup().await;
+    let addr = harness.spawn_app().await;
+    let mut guest = Client::new(addr);
+
+    let home = guest.get("/").await;
+    assert!(!forbids_indexing(&home.body), "/ must stay indexable");
+
+    for path in ["/login", "/register", "/forgot-password", "/reset-password"] {
+        let resp = guest.get(path).await;
+        assert_eq!(resp.status, 200, "GET {path}: {}", resp.body);
+        assert!(forbids_indexing(&resp.body), "{path} lacks noindex");
+    }
+
+    let mut member = signed_in(addr, "ada@nebula.test").await;
+    for path in ["/verify-email", "/profile"] {
+        let resp = member.get(path).await;
+        assert_eq!(resp.status, 200, "GET {path}: {}", resp.body);
+        assert!(forbids_indexing(&resp.body), "{path} lacks noindex");
+    }
+    let mut user = reload("ada@nebula.test").await;
+    mark_verified(&mut user).await;
+    let dashboard = member.get("/dashboard").await;
+    assert_eq!(dashboard.status, 200, "GET /dashboard: {}", dashboard.body);
+    assert!(
+        forbids_indexing(&dashboard.body),
+        "/dashboard lacks noindex"
+    );
+}
+
+#[tokio::test]
+async fn seo_005_error_pages_are_not_indexed() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    let missing = client.get("/no-such-page").await;
+    assert_eq!(missing.status, 404);
+    assert!(
+        forbids_indexing(&missing.body),
+        "the 404 page lacks noindex"
+    );
+}
+
+#[tokio::test]
+async fn seo_006_robots_txt_allows_everything_and_names_the_sitemap() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    for method in ["GET", "HEAD"] {
+        let resp = client.request(method, "/robots.txt", None, false).await;
+        assert_eq!(
+            resp.status, 200,
+            "{method} /robots.txt must serve: {}",
+            resp.body
+        );
+        assert_eq!(
+            header(&resp, "content-type"),
+            Some(PLAIN),
+            "{method} /robots.txt"
+        );
+        assert_eq!(
+            header(&resp, "cache-control"),
+            Some(PUBLIC_HOUR),
+            "{method} /robots.txt"
+        );
+    }
+    let body = client.get("/robots.txt").await.body;
+    let lines: Vec<&str> = body.lines().map(str::trim).collect();
+    assert!(lines.contains(&"User-agent: *"), "{body}");
+    assert!(
+        lines.contains(&"Sitemap: http://nebula.test/sitemap.xml"),
+        "{body}"
+    );
+    assert!(
+        !lines
+            .iter()
+            .any(|l| l.starts_with("Disallow:") && !l["Disallow:".len()..].trim().is_empty()),
+        "robots.txt must block nothing: {body}"
+    );
+}
+
+#[tokio::test]
+async fn seo_007_sitemap_lists_the_public_pages() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    for method in ["GET", "HEAD"] {
+        let resp = client.request(method, "/sitemap.xml", None, false).await;
+        assert_eq!(
+            resp.status, 200,
+            "{method} /sitemap.xml must serve: {}",
+            resp.body
+        );
+        assert_eq!(
+            header(&resp, "content-type"),
+            Some("application/xml; charset=utf-8"),
+            "{method} /sitemap.xml"
+        );
+        assert_eq!(
+            header(&resp, "cache-control"),
+            Some(PUBLIC_HOUR),
+            "{method} /sitemap.xml"
+        );
+    }
+    let body = client.get("/sitemap.xml").await.body;
+    assert!(
+        body.contains("http://www.sitemaps.org/schemas/sitemap/0.9"),
+        "{body}"
+    );
+    assert!(body.contains("<loc>http://nebula.test/</loc>"), "{body}");
+}
+
+#[tokio::test]
+async fn seo_008_no_cookie_on_robots_or_sitemap() {
+    let mut harness = setup().await;
+    let addr = harness.spawn_app().await;
+
+    let mut visitor = Client::new(addr);
+    assert_eq!(visitor.get("/login").await.status, 200);
+    assert!(
+        visitor.cookies.contains_key("XSRF-TOKEN"),
+        "a page visit starts a session: {:?}",
+        visitor.cookies
+    );
+
+    for path in ["/robots.txt", "/sitemap.xml"] {
+        for method in ["GET", "HEAD"] {
+            let resp = Client::new(addr).request(method, path, None, false).await;
+            assert!(
+                !resp.headers.contains_key("set-cookie"),
+                "{method} {path} without a session set a cookie: {:?}",
+                resp.headers
+            );
+            let resp = visitor.request(method, path, None, false).await;
+            assert!(
+                !resp.headers.contains_key("set-cookie"),
+                "{method} {path} with a session set a cookie: {:?}",
+                resp.headers
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn seo_009_home_describes_the_site_in_json_ld() {
+    let mut harness = setup().await;
+    // SAFETY: as in `seo_003_open_graph_and_x_card`.
+    unsafe {
+        std::env::set_var("APP_NAME", "Nebula");
+    }
+    let mut client = Client::new(harness.spawn_app().await);
+
+    let home = client.get("/").await;
+    let blocks = json_ld(&home.body);
+    let of_type = |kind: &str| blocks.iter().find(|b| b["@type"] == kind).cloned();
+    let website = of_type("WebSite").unwrap_or_else(|| panic!("no WebSite JSON-LD: {blocks:?}"));
+    assert_eq!(website["name"], "Nebula", "{website}");
+    assert_eq!(website["url"], "http://nebula.test/", "{website}");
+    let org =
+        of_type("Organization").unwrap_or_else(|| panic!("no Organization JSON-LD: {blocks:?}"));
+    assert_eq!(org["name"], "Nebula", "{org}");
+    assert_eq!(org["url"], "http://nebula.test/", "{org}");
+    assert_eq!(
+        org["logo"], "http://nebula.test/android-chrome-512x512.png",
+        "{org}"
+    );
+}
+
+/// A guard: it also passes before the work. It catches a later change that
+/// serves the robots or sitemap body to other methods.
+#[tokio::test]
+async fn seo_010_robots_and_sitemap_only_for_get_and_head() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    // A page visit first, so the POSTs carry a valid CSRF token and reach
+    // whatever would answer them.
+    assert_eq!(client.get("/login").await.status, 200);
+    let post = client.post_json("/robots.txt", json!({})).await;
+    let served = post.status == 200
+        && header(&post, "content-type") == Some(PLAIN)
+        && post.body.contains("User-agent:");
+    assert!(!served, "POST /robots.txt was served the robots body");
+    let post = client.post_json("/sitemap.xml", json!({})).await;
+    let served = post.status == 200
+        && header(&post, "content-type") == Some("application/xml; charset=utf-8")
+        && post.body.contains("urlset");
+    assert!(!served, "POST /sitemap.xml was served the sitemap");
 }
