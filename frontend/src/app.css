@@ -7,7 +7,9 @@
 /* Nebula theme: shadcn-svelte's tokens (base color zinc) with Nebula's
    brand. `--primary` is the neon cyan; `--brand-accent` is the red/orange
    accent. shadcn's `--accent` is the neutral hover/focus background, not a
-   brand color. Change colors here only; components read the tokens. */
+   brand color. The ring, sidebar-primary and first two chart colors refer
+   to the brand tokens, so changing `--primary` or `--brand-accent` restyles
+   them too. Change colors here only; components read the tokens. */
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
@@ -27,21 +29,21 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.5 0.11 210);
+  --ring: var(--primary);
   --brand-accent: oklch(0.57 0.19 35);
-  --chart-1: oklch(0.5 0.11 210);
-  --chart-2: oklch(0.57 0.19 35);
+  --chart-1: var(--primary);
+  --chart-2: var(--brand-accent);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-primary: oklch(0.5 0.11 210);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
   --sidebar-accent: oklch(0.967 0.001 286.375);
   --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
   --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.5 0.11 210);
+  --sidebar-ring: var(--primary);
 }
 
 .dark {
@@ -62,21 +64,21 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.72 0.15 200);
+  --ring: var(--primary);
   --brand-accent: oklch(0.7 0.18 35);
-  --chart-1: oklch(0.72 0.15 200);
-  --chart-2: oklch(0.7 0.18 35);
+  --chart-1: var(--primary);
+  --chart-2: var(--brand-accent);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
   --sidebar: oklch(0.21 0.006 285.885);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.72 0.15 200);
-  --sidebar-primary-foreground: oklch(0.16 0.02 240);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
   --sidebar-accent: oklch(0.274 0.006 286.033);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.72 0.15 200);
+  --sidebar-ring: var(--primary);
 }
 
 @theme inline {
