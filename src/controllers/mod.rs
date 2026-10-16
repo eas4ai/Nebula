@@ -19,8 +19,8 @@ pub(crate) fn app_url() -> String {
 /// Refuse to serve in production without a usable `APP_URL`: an absolute
 /// `http://` or `https://` URL with a host. Emailed links, the canonical
 /// link, the sitemap and `/llms.txt` are all built from it, and the
-/// localhost fallback would point them at this machine. Outside production
-/// the fallback stands.
+/// localhost fallback would point them at this machine. A loopback host is
+/// accepted with a warning. Outside production the fallback stands.
 pub(crate) fn require_app_url() -> Result<(), FrameworkError> {
     if !suprnova::Config::is_production() {
         return Ok(());
@@ -28,16 +28,34 @@ pub(crate) fn require_app_url() -> Result<(), FrameworkError> {
     let value = std::env::var("APP_URL").unwrap_or_default();
     // `Url::parse` lowercases the scheme and rejects an empty host, so
     // `HTTPS://example.com` passes and `https://:8443` does not.
-    let usable = url::Url::parse(&value).is_ok_and(|url| {
+    let url = url::Url::parse(&value).ok().filter(|url| {
         matches!(url.scheme(), "http" | "https")
             && url.host_str().is_some_and(|host| !host.is_empty())
     });
-    if usable {
-        Ok(())
-    } else {
-        Err(FrameworkError::internal(
+    let Some(url) = url else {
+        return Err(FrameworkError::internal(
             "APP_URL: production needs the app's public address, an absolute http:// or https:// URL with a host, such as https://example.com",
-        ))
+        ));
+    };
+    // A loopback host is valid, and a production-mode smoke test on a
+    // workstation uses one, so it starts, but never quietly.
+    if is_loopback(&url) {
+        tracing::warn!(
+            host = url.host_str().unwrap_or_default(),
+            "APP_URL points at this machine: emailed links, canonical links and the sitemap will name a loopback host; set APP_URL to the app's public address"
+        );
+    }
+    Ok(())
+}
+
+/// Whether `url`'s host is a loopback name: `localhost` or a `.localhost`
+/// name, an address in `127.0.0.0/8` or `::1`, or the unspecified address.
+fn is_loopback(url: &url::Url) -> bool {
+    match url.host() {
+        Some(url::Host::Domain(name)) => name == "localhost" || name.ends_with(".localhost"),
+        Some(url::Host::Ipv4(ip)) => ip.is_loopback() || ip.is_unspecified(),
+        Some(url::Host::Ipv6(ip)) => ip.is_loopback() || ip.is_unspecified(),
+        None => false,
     }
 }
 
