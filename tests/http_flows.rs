@@ -91,6 +91,10 @@ async fn setup() -> Harness {
         std::env::set_var("APP_ENV", "test");
         std::env::set_var("MAIL_FROM", "test@nebula.test");
         std::env::set_var("APP_URL", "http://nebula.test");
+        // Analytics stays off unless a test turns it on.
+        std::env::remove_var("PLAUSIBLE_SRC");
+        std::env::remove_var("PLAUSIBLE_DOMAIN");
+        std::env::remove_var("SECURITY_HEADERS");
     }
 
     // The session middleware fails closed (500) without an encryption key -
@@ -2095,4 +2099,196 @@ fn boot_003_production_warns_about_a_loopback_app_url() {
         !warns_about_app_url(&stderr),
         "a public APP_URL was warned about: {stderr}"
     );
+}
+
+// ============================================================================
+// 12. Analytics: Plausible's script and the Content-Security-Policy it needs.
+//     Each test name starts with the number of the requirement it checks
+//     (`analytics_<nnn>_…`), so keep the names.
+// ============================================================================
+
+const PLAUSIBLE_SRC: &str = "https://plausible.example/js/script.js";
+
+impl Harness {
+    /// Stop the running server, set the Plausible variables, and start a
+    /// new one, so one test can compare the policy with analytics off and on.
+    async fn respawn_with(
+        &mut self,
+        src: Option<&str>,
+        domain: Option<&str>,
+        preset: Option<&str>,
+    ) -> SocketAddr {
+        if let Some(server) = self.server.take() {
+            server.abort();
+        }
+        // SAFETY: serialized behind `common::TEST_LOCK`, which the harness
+        // holds, and set while no server runs.
+        unsafe {
+            for (name, value) in [
+                ("PLAUSIBLE_SRC", src),
+                ("PLAUSIBLE_DOMAIN", domain),
+                ("SECURITY_HEADERS", preset),
+            ] {
+                match value {
+                    Some(value) => std::env::set_var(name, value),
+                    None => std::env::remove_var(name),
+                }
+            }
+        }
+        self.spawn_app().await
+    }
+}
+
+/// The scripts in the head whose `src` is `src`.
+fn scripts_from<'a>(html: &'a str, src: &str) -> Vec<&'a str> {
+    head_tags(html, "script")
+        .into_iter()
+        .filter(|tag| attr(tag, "src") == Some(src))
+        .collect()
+}
+
+/// The response's Content-Security-Policy.
+fn csp(resp: &Resp) -> String {
+    header(resp, "content-security-policy")
+        .unwrap_or_else(|| panic!("no Content-Security-Policy: {:?}", resp.headers))
+        .to_string()
+}
+
+/// The nonce in a policy (`'nonce-…'`).
+fn csp_nonce(policy: &str) -> Option<String> {
+    let start = policy.find("'nonce-")? + "'nonce-".len();
+    let end = policy[start..].find('\'')?;
+    Some(policy[start..start + end].to_string())
+}
+
+/// The policy with its nonce replaced by `N`, so two responses compare.
+fn without_nonce(policy: &str) -> String {
+    match csp_nonce(policy) {
+        Some(nonce) => policy.replace(&nonce, "N"),
+        None => policy.to_string(),
+    }
+}
+
+/// The sources of one directive.
+fn directive<'a>(policy: &'a str, name: &str) -> Vec<&'a str> {
+    policy
+        .split(';')
+        .map(str::trim)
+        .find(|part| part.split_whitespace().next() == Some(name))
+        .map(|part| part.split_whitespace().skip(1).collect())
+        .unwrap_or_default()
+}
+
+#[tokio::test]
+async fn analytics_001_script_loads_once_with_the_nonce() {
+    let mut harness = setup().await;
+    let addr = harness
+        .respawn_with(Some(PLAUSIBLE_SRC), Some("nebula.test"), None)
+        .await;
+    let mut client = Client::new(addr);
+
+    for path in ["/", "/login"] {
+        let resp = client.get(path).await;
+        let scripts = scripts_from(&resp.body, PLAUSIBLE_SRC);
+        assert_eq!(
+            scripts.len(),
+            1,
+            "{path}: the Plausible script is not there exactly once: {scripts:?}"
+        );
+        let tag = scripts[0];
+        assert!(tag.contains(" defer"), "{path}: not deferred: {tag}");
+        assert_eq!(
+            attr(tag, "data-domain"),
+            Some("nebula.test"),
+            "{path}: {tag}"
+        );
+        let policy = csp(&resp);
+        assert_eq!(
+            attr(tag, "nonce").map(str::to_string),
+            csp_nonce(&policy),
+            "{path}: the script's nonce is not the policy's: {tag} / {policy}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn analytics_002_off_unless_both_are_set() {
+    let mut harness = setup().await;
+    let addr = harness.respawn_with(None, None, None).await;
+    let baseline = without_nonce(&csp(&Client::new(addr).get("/").await));
+
+    for (label, src, domain) in [
+        ("only PLAUSIBLE_SRC", Some(PLAUSIBLE_SRC), None),
+        ("only PLAUSIBLE_DOMAIN", None, Some("nebula.test")),
+        ("neither", None, None),
+    ] {
+        let addr = harness.respawn_with(src, domain, None).await;
+        let resp = Client::new(addr).get("/").await;
+        assert!(
+            scripts_from(&resp.body, PLAUSIBLE_SRC).is_empty(),
+            "{label}: the Plausible script loads"
+        );
+        assert_eq!(
+            without_nonce(&csp(&resp)),
+            baseline,
+            "{label}: the policy is not the framework's own"
+        );
+    }
+}
+
+#[tokio::test]
+async fn analytics_003_policy_adds_only_the_plausible_origin() {
+    let mut harness = setup().await;
+    for preset in [None, Some("strict")] {
+        let addr = harness.respawn_with(None, None, preset).await;
+        let off = without_nonce(&csp(&Client::new(addr).get("/").await));
+
+        let addr = harness
+            .respawn_with(Some(PLAUSIBLE_SRC), Some("nebula.test"), preset)
+            .await;
+        let on = without_nonce(&csp(&Client::new(addr).get("/").await));
+
+        assert!(
+            directive(&on, "connect-src").contains(&"https://plausible.example"),
+            "{preset:?}: connect-src lacks the Plausible origin: {on}"
+        );
+        assert_eq!(
+            on.replace(" https://plausible.example", ""),
+            off,
+            "{preset:?}: the policy changed beyond the Plausible origin"
+        );
+    }
+}
+
+#[tokio::test]
+async fn analytics_004_values_are_escaped() {
+    let mut harness = setup().await;
+    let addr = harness
+        .respawn_with(Some(PLAUSIBLE_SRC), Some("x\" onload=\"alert(1)"), None)
+        .await;
+    let home = Client::new(addr).get("/").await;
+    assert!(
+        !home.body.contains("onload=\"alert(1)\""),
+        "PLAUSIBLE_DOMAIN added an attribute: {}",
+        home.body.split("</head>").next().unwrap_or("")
+    );
+}
+
+#[tokio::test]
+async fn analytics_005_a_bad_script_url_stops_the_boot() {
+    let _harness = setup().await;
+    // SAFETY: serialized behind `common::TEST_LOCK`; no server runs. The next
+    // test's `setup` removes them.
+    unsafe {
+        std::env::set_var("PLAUSIBLE_SRC", "javascript:alert(1)");
+        std::env::set_var("PLAUSIBLE_DOMAIN", "nebula.test");
+    }
+    suprnova::middleware::clear_global_middleware_for_test();
+    match nebula::bootstrap::try_register_http_stack() {
+        Ok(()) => panic!("the server started with PLAUSIBLE_SRC=javascript:alert(1)"),
+        Err(error) => assert!(
+            error.to_string().contains("PLAUSIBLE_SRC"),
+            "the error does not name PLAUSIBLE_SRC: {error}"
+        ),
+    }
 }
