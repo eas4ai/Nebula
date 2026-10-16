@@ -149,6 +149,9 @@ pub fn try_register_http_stack() -> Result<(), FrameworkError> {
     global_middleware!(crate::seo::RobotsTxt);
     global_middleware!(crate::seo::Sitemap);
 
+    // Every page's canonical link, from `APP_URL` and the request's path.
+    global_middleware!(crate::seo::CanonicalLink);
+
     // Session middleware (required for authentication). The config is
     // cloned because the CSRF middleware below reads the same values, so
     // the session cookie and the XSRF cookie cannot drift apart.

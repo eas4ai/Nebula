@@ -16,7 +16,9 @@ routes! {
     // the query string is the proof, so no session is needed. Keep it public
     // so a link opened on a logged-out device still verifies (gating it behind
     // `auth()` would redirect to `/login` and drop the token).
-    get!("/verify-email/verify", controllers::verify_email::verify),
+    get!("/verify-email/verify", controllers::verify_email::verify)
+        // A missing, invalid or expired token renders the verification page.
+        .with_head(|head| head.robots("noindex")),
 
     // Guest-only routes (redirect to dashboard if logged in)
     group!("/", {
