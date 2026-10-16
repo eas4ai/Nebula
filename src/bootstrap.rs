@@ -31,8 +31,7 @@ use sea_orm_migration::MigratorTrait;
 use suprnova::{
     App, Auth, AuthConfig, AuthManager, CsrfMiddleware, DB, DevToolsConfig, EloquentUserProvider,
     FrameworkError, Frontend, IncludeMiddleware, Inertia, InertiaConfig, InertiaRootTemplate,
-    RootShare, SecurityHeaders, SessionConfig, SessionMiddleware, bind, global_middleware,
-    singleton,
+    RootShare, SessionConfig, SessionMiddleware, bind, global_middleware, singleton,
 };
 
 use crate::middleware;
@@ -129,7 +128,10 @@ pub fn try_register_http_stack() -> Result<(), FrameworkError> {
     // Response security headers and the per-request CSP nonce, outermost so
     // every response is covered. `SECURITY_HEADERS` picks the preset
     // (`balanced` when unset).
-    global_middleware!(SecurityHeaders::from_env()?);
+    // Plausible analytics, when PLAUSIBLE_SRC and PLAUSIBLE_DOMAIN are set,
+    // also adds its origin to the policy's `connect-src` (`src/analytics.rs`).
+    crate::analytics::configure()?;
+    global_middleware!(crate::analytics::security_headers()?);
 
     // Global middleware (runs on every request in registration order)
     global_middleware!(middleware::LoggingMiddleware);
