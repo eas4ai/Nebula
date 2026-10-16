@@ -9,3 +9,4 @@ pub mod migrations;
 pub mod models;
 pub mod props;
 pub mod routes;
+pub mod seo;

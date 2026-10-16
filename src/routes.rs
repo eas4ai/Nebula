@@ -28,7 +28,10 @@ routes! {
         post!("/forgot-password", controllers::password_reset::send_link),
         get!("/reset-password", controllers::password_reset::show_reset),
         post!("/reset-password", controllers::password_reset::reset),
-    }).middleware(middleware::authenticate::guest()),
+    })
+        .middleware(middleware::authenticate::guest())
+        // Sign-in and password pages stay out of search results.
+        .with_head(|head| head.robots("noindex")),
 
     // Authenticated, verification NOT required. An unverified-but-logged-in
     // user must be able to view the notice, resend the link, and log out - so
@@ -46,7 +49,9 @@ routes! {
         patch!("/profile", controllers::profile::update),
         put!("/profile/password", controllers::profile::update_password),
         delete!("/profile", controllers::profile::destroy),
-    }).middleware(middleware::authenticate::auth()),
+    })
+        .middleware(middleware::authenticate::auth())
+        .with_head(|head| head.robots("noindex")),
 
     // Authenticated AND email-verified. `verified()` composes after `auth()`,
     // so an unverified user is redirected to `/verify-email` and an
@@ -55,5 +60,6 @@ routes! {
         get!("/dashboard", controllers::dashboard::index),
     })
         .middleware(middleware::authenticate::auth())
-        .middleware(middleware::authenticate::verified()),
+        .middleware(middleware::authenticate::verified())
+        .with_head(|head| head.robots("noindex")),
 }
