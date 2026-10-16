@@ -124,7 +124,9 @@ links land on the right origin.
 (`favicon.ico`, the PNG sizes, `apple-touch-icon.png`,
 `site.webmanifest`). Replace those files with your own and the whole app
 follows - the tags that reference them are in
-`templates/app.html`.
+`templates/app.html`. `BrandingFiles` in `src/controllers/static_files.rs`
+serves them before the session, with a day-long public cache and no
+cookie; add any new root-level file to its whitelist there.
 
 **Colors.** The UI is [shadcn-svelte](https://www.shadcn-svelte.com) on
 OKLCH theme tokens in `frontend/src/app.css`: `:root` holds the light
