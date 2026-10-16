@@ -20,7 +20,7 @@
 </script>
 
 <DropdownMenu.Root>
-  <DropdownMenu.Trigger class={buttonVariants({ variant: 'ghost' })} aria-label="Account menu">
+  <DropdownMenu.Trigger class={buttonVariants({ variant: 'ghost' })} aria-label={`Account menu for ${name}`}>
     <Avatar.Root class="size-6">
       <Avatar.Fallback class="text-xs">{initials}</Avatar.Fallback>
     </Avatar.Root>
