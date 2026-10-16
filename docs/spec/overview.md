@@ -20,6 +20,7 @@ A new Suprnova app needs a lot wired together and tested before its own work can
 | pages.md | PAGE | Home's content, the document head on first and later visits, the app's external base URL |
 | twins.md | TWIN | Markdown twins of public pages, `/llms.txt`, and the alternate link that advertises a twin |
 | static-files.md | STATIC | the branding files at the web root: favicons and the web app manifest |
+| seo.md | SEO | the head's canonical, description, robots, Open Graph and X tags, JSON-LD on Home, `/robots.txt` and `/sitemap.xml` |
 
 ## Not yet specified
 
