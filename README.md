@@ -111,12 +111,12 @@ flows fail fast on a missing sender rather than minting orphan tokens.
 
 ## APP_URL
 
-Verification and reset links are built from `APP_URL`, not from the
-incoming request - keep it in sync with how you actually reach the app
-(default `http://localhost:8080`, matching `SERVER_PORT`). If you serve
-the kit on a named TLS dev URL via `suprnova dev:tls`, set
-`APP_URL=https://<name>.localhost` so emailed links land on the right
-origin.
+Verification and reset links, and the links in `/llms.txt`, are built
+from `APP_URL`, not from the incoming request - keep it in sync with how
+you actually reach the app (default `http://localhost:8080`, matching
+`SERVER_PORT`). If you serve the kit on a named TLS dev URL via
+`suprnova dev:tls`, set `APP_URL=https://<name>.localhost` so emailed
+links land on the right origin.
 
 ## Make it yours
 
@@ -195,25 +195,34 @@ public prose page a Markdown copy, its twin, at the page's address plus
 `/llms.txt` lists the twins, and each page names its twin in `<head>` with
 `<link rel="alternate" type="text/markdown">`.
 
+`/llms.txt` takes its heading from `APP_NAME` (`Nebula` when it is unset)
+and builds absolute links to the twins from `APP_URL`, so set both in
+production. Edit `SUMMARY` in `src/markdown.rs` to describe your app there.
+
 To add a page, add an entry to `PAGES` in `src/markdown.rs` and call
-`Head::try_update(|head| head.link_tag(markdown::alternate(<path>)))` in
-its handler. Edit `SUMMARY` there to describe your app in `/llms.txt`.
+`markdown::advertise(<path>)?` in its handler. `advertise` adds the head
+link only for a path that `PAGES` lists, so a page never names a twin that
+does not exist.
 
-Both run before the session middleware, ahead of every route's sign-in
-check. Follow these rules for every page and source you add:
+Both middlewares run before the session middleware, ahead of every
+route's sign-in check. Every `MarkdownSource` you write, and every
+middleware like `LlmsTxt`, follows four rules:
 
-- Return Markdown only for pages anyone may read, and decide that on each
-  request from current data.
-- Serve twins of pages that can stop being public (drafts, deleted or
-  private pages) with `MarkdownMiddleware::new(..).max_age(0)`.
-- A source that reads the database must limit its own time: twins run
-  outside the 30-second request timeout.
-- Keep both middlewares before `SessionMiddleware` in
-  `src/bootstrap.rs`. Their responses are publicly cacheable, and a cache
-  must never store a visitor's cookie with them.
+1. **Public pages only.** Return Markdown only for pages anyone may read,
+   and decide that on each request from current data.
+2. **Caching.** Serve twins of pages that can stop being public (drafts,
+   deleted or private pages) with `MarkdownMiddleware::new(..).max_age(0)`.
+3. **Methods and errors.** Answer only `GET` and `HEAD`, and answer a
+   failed lookup with a 500 that hides the error text. Plugin v0.3.0 does
+   both for twins: it sends only `GET` and `HEAD` to the source, logs a
+   failed lookup and answers a generic 500 marked `no-store`. A middleware
+   you write yourself must check the method itself, as `LlmsTxt` does.
+4. **No cookies.** Keep the twin middleware and `LlmsTxt` before
+   `SessionMiddleware` in `src/bootstrap.rs`. Their responses are publicly
+   cacheable, and a cache must never store a visitor's cookie with them.
 
-Plugin v0.3.0 already sends only `GET` and `HEAD` to the source, and
-answers a failed lookup with a plain 500 that is not cached.
+A source that reads the database must also limit its own time: twins run
+outside the 30-second request timeout.
 
 ## Production
 
