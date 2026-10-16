@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte'
+  import { onMount, type Snippet } from 'svelte'
   import Loader2Icon from '@lucide/svelte/icons/loader-2'
   import { Button, type ButtonVariant } from '$lib/components/ui/button/index.js'
 
@@ -18,6 +18,18 @@
     class?: string
     children: Snippet
   } = $props()
+
+  // The button is also disabled until the page's code has taken over. The
+  // server renders the form before the browser runs any of it, and a click
+  // or Enter in that gap would make the browser submit the form itself: the
+  // request never reaches the Inertia handler and the page reloads with
+  // empty fields. `onMount` does not run during server rendering, so the
+  // server sends the button disabled and the browser enables it after
+  // hydration.
+  let ready = $state(false)
+  onMount(() => {
+    ready = true
+  })
 </script>
 
 <Button
@@ -25,7 +37,7 @@
   {variant}
   {form}
   class={className}
-  disabled={processing}
+  disabled={processing || !ready}
   aria-busy={processing}
 >
   {#if processing}
