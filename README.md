@@ -141,6 +141,16 @@ toasts) live in `frontend/src/lib/layouts/` and `frontend/src/lib/components/`.
 Sign-in pages (`pages/auth/*`) use the guest layout and every other page the
 app layout; `frontend/src/main.ts` and `ssr.ts` pick it.
 
+**Rendered Markdown.** Render Markdown on the server with Suprnova's
+`Str::markdown(source, &MarkdownRenderer::default())`
+(`suprnova::content::MarkdownRenderer`), which escapes raw HTML and unsafe
+links by default, and pass the HTML to the page as a prop. Show it with
+`<article class="prose prose-theme">{@html html}</article>`: the
+`@tailwindcss/typography` plugin lays it out, and `prose-theme` in
+`frontend/src/app.css` takes its colors from the theme tokens, so it follows
+light and dark mode. Pages are server-rendered, so search engines read the
+article text in the first response.
+
 **Root-served static files.** Suprnova routes everything - there is no
 implicit public directory, by design. The kit's pattern for files browsers
 request at the web root is `src/controllers/static_files.rs`: a
