@@ -49,7 +49,7 @@ pub fn register() {
             .og_image(image)
             .twitter(TwitterCard::new().card(TwitterCardType::Summary))
     });
-    // Head::errors(|_| ErrorPages::default().defaults(|head| head.robots("noindex")));
+    Head::errors(|_| ErrorPages::default().defaults(|head| head.robots("noindex")));
 }
 
 /// Home's own head: its description and `og:title` from the text it shows,
