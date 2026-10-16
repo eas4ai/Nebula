@@ -1,20 +1,21 @@
 <script lang="ts">
-  import { Card } from 'sv5ui'
+  import Head from '$lib/components/Head.svelte'
+  import * as Card from '$lib/components/ui/card/index.js'
   import type { DashboardProps } from '../types/inertia-props'
 
   let { user }: DashboardProps = $props()
 </script>
 
-<div class="mx-auto w-full max-w-5xl space-y-6 px-4 py-10">
-  <h1 class="text-2xl font-semibold text-on-surface">Dashboard</h1>
+<Head title="Dashboard" />
 
-  <Card>
-    <div class="space-y-2">
-      <h2 class="text-lg font-medium text-on-surface">
-        Welcome, {user.name}!
-      </h2>
-      <p class="text-sm text-on-surface-variant">You are logged in.</p>
-      <p class="text-sm text-on-surface-variant">Email: {user.email}</p>
-    </div>
-  </Card>
+<div class="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-10">
+  <h1 class="text-2xl font-semibold">Dashboard</h1>
+
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>Welcome, {user.name}!</Card.Title>
+      <Card.Description>You are logged in.</Card.Description>
+    </Card.Header>
+    <Card.Content class="text-sm text-muted-foreground">Email: {user.email}</Card.Content>
+  </Card.Root>
 </div>
