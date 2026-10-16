@@ -1956,3 +1956,77 @@ async fn seo_010_robots_and_sitemap_only_for_get_and_head() {
         && post.body.contains("urlset");
     assert!(!served, "POST /sitemap.xml was served the sitemap");
 }
+
+// ============================================================================
+// 11. Boot configuration: production refuses to start without APP_URL. Each
+//     test name starts with the number of the requirement it checks
+//     (`boot_<nnn>_…`), so keep the names.
+// ============================================================================
+
+/// Register the HTTP stack with `APP_ENV` and `APP_URL` set for one call,
+/// then put `APP_ENV` back to `test` before the caller asserts anything.
+fn register_with(env: &str, app_url: Option<&str>) -> Result<(), String> {
+    // SAFETY: called with `common::TEST_LOCK` held (the caller holds a
+    // harness) and no server running, so nothing reads the variables at once.
+    unsafe {
+        std::env::set_var("APP_ENV", env);
+        match app_url {
+            Some(url) => std::env::set_var("APP_URL", url),
+            None => std::env::remove_var("APP_URL"),
+        }
+    }
+    suprnova::middleware::clear_global_middleware_for_test();
+    let result = nebula::bootstrap::try_register_http_stack().map_err(|e| e.to_string());
+    // SAFETY: as above.
+    unsafe {
+        std::env::set_var("APP_ENV", "test");
+    }
+    result
+}
+
+#[tokio::test]
+async fn boot_001_production_needs_app_url() {
+    let _harness = setup().await;
+
+    for (label, app_url) in [
+        ("unset", None),
+        ("empty", Some("")),
+        ("without a scheme", Some("localhost:8080")),
+    ] {
+        match register_with("production", app_url) {
+            Ok(()) => panic!("production started with APP_URL {label}"),
+            Err(error) => assert!(
+                error.contains("APP_URL"),
+                "production refused APP_URL {label} without naming it: {error}"
+            ),
+        }
+    }
+
+    if let Err(error) = register_with("production", Some("https://nebula.test")) {
+        assert!(
+            !error.contains("APP_URL"),
+            "production refused a valid APP_URL: {error}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn boot_002_outside_production_app_url_defaults_to_localhost() {
+    let mut harness = setup().await;
+    // SAFETY: serialized behind `common::TEST_LOCK`, which `setup` holds,
+    // and set before the server starts. The next test's `setup` sets it back.
+    unsafe {
+        std::env::remove_var("APP_URL");
+    }
+    let mut client = Client::new(harness.spawn_app().await);
+
+    let index = client.get("/llms.txt").await;
+    assert!(
+        index
+            .body
+            .lines()
+            .any(|line| line == "- [Home](http://localhost:8765/index.html.md)"),
+        "without APP_URL the links do not use http://localhost:8765: {}",
+        index.body
+    );
+}
