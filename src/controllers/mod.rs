@@ -16,6 +16,12 @@ pub(crate) fn app_url() -> String {
     std::env::var("APP_URL").unwrap_or_else(|_| "http://localhost:8765".into())
 }
 
+/// The app's name, for `/llms.txt` and the Open Graph site name. `APP_NAME`
+/// or `Nebula`.
+pub(crate) fn app_name() -> String {
+    std::env::var("APP_NAME").unwrap_or_else(|_| "Nebula".into())
+}
+
 // ============================================================================
 // Inertia-aware form validation
 //

@@ -33,7 +33,7 @@ use suprnova::{
 };
 use suprnova_markdown::MarkdownSource;
 
-use crate::controllers::{app_url, home};
+use crate::controllers::{app_name, app_url, home};
 
 /// The summary line under the title in `/llms.txt`. Describe your app here.
 pub const SUMMARY: &str = "A Suprnova starter kit: sign-up, sign-in, email verification, password reset and profile management, on Rust, Inertia and Svelte.";
@@ -46,6 +46,8 @@ pub const HOME: &str = "/index.html";
 pub struct PublicPage {
     /// The page's path as its twin's address names it, without `.md`.
     pub path: &'static str,
+    /// The page's own address, which `/sitemap.xml` lists.
+    pub href: &'static str,
     /// The page's name in `/llms.txt`.
     pub title: &'static str,
     /// Builds the page's Markdown from the data the page renders.
@@ -55,6 +57,7 @@ pub struct PublicPage {
 /// Every page with a twin. Add an entry for each public prose page.
 pub const PAGES: &[PublicPage] = &[PublicPage {
     path: HOME,
+    href: "/",
     title: "Home",
     markdown: home::markdown_twin,
 }];
@@ -127,7 +130,7 @@ impl Middleware for LlmsTxt {
         if request.path() != "/llms.txt" || !matches!(request.method().as_str(), "GET" | "HEAD") {
             return next(request).await;
         }
-        let app_name = std::env::var("APP_NAME").unwrap_or_else(|_| "Nebula".to_string());
+        let app_name = app_name();
         // `Err` is how a middleware answers without calling the router.
         Err(
             HttpResponse::bytes_body(llms_txt(&app_name, &app_url()), "text/plain; charset=utf-8")
