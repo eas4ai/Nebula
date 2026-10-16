@@ -44,8 +44,7 @@ pub async fn serve(req: Request) -> Response {
     match tokio::fs::read(public_path(file)).await {
         Ok(bytes) => {
             Ok(HttpResponse::bytes_body(bytes, mime)
-                .header("Cache-Control", "public, max-age=3600")
-                .header("X-Content-Type-Options", "sniff"))
+                .header("Cache-Control", "public, max-age=86400"))
         }
         Err(e) => {
             tracing::warn!(file, error = %e, "whitelisted public asset could not be read");

@@ -17,7 +17,6 @@ routes! {
     // same handler in dev and prod (the page origin is the Rust server in
     // both; Vite only supplies JS/CSS).
     get!("/favicon.ico", controllers::static_files::serve),
-    post!("/favicon.ico", controllers::static_files::serve),
     get!("/favicon-16x16.png", controllers::static_files::serve),
     get!("/favicon-32x32.png", controllers::static_files::serve),
     get!("/android-chrome-192x192.png", controllers::static_files::serve),
