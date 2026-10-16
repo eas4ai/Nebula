@@ -184,6 +184,37 @@ receives, and `src/props/flash.rs` the shape of `page.flash`. After changing
 a struct that derives `InertiaProps`, run `suprnova generate-types` (`suprnova
 serve` does it for you) to refresh `frontend/src/types/inertia-props.ts`.
 
+## Markdown twins for crawlers
+
+Pages render with JavaScript, so crawlers that do not run it (GPTBot,
+ClaudeBot, PerplexityBot, `curl`) see an empty page. Nebula gives each
+public prose page a Markdown copy, its twin, at the page's address plus
+`.md`. The Home page's twin is `/index.html.md`. Twins are served by
+[`suprnova-markdown`](https://github.com/eas4ai/suprnova-markdown) with
+`X-Robots-Tag: noindex`, so search engines keep ranking the HTML page.
+`/llms.txt` lists the twins, and each page names its twin in `<head>` with
+`<link rel="alternate" type="text/markdown">`.
+
+To add a page, add an entry to `PAGES` in `src/markdown.rs` and call
+`Head::try_update(|head| head.link_tag(markdown::alternate(<path>)))` in
+its handler. Edit `SUMMARY` there to describe your app in `/llms.txt`.
+
+Both run before the session middleware, ahead of every route's sign-in
+check. Follow these rules for every page and source you add:
+
+- Return Markdown only for pages anyone may read, and decide that on each
+  request from current data.
+- Serve twins of pages that can stop being public (drafts, deleted or
+  private pages) with `MarkdownMiddleware::new(..).max_age(0)`.
+- A source that reads the database must limit its own time: twins run
+  outside the 30-second request timeout.
+- Keep both middlewares before `SessionMiddleware` in
+  `src/bootstrap.rs`. Their responses are publicly cacheable, and a cache
+  must never store a visitor's cookie with them.
+
+Plugin v0.3.0 already sends only `GET` and `HEAD` to the source, and
+answers a failed lookup with a plain 500 that is not cached.
+
 ## Production
 
 Build the frontend with `cd frontend && npm run build && npm run build:ssr`,
