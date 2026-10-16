@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    {# The application's own head content goes here: fonts, meta tags. The
+       favicon and manifest links are below. #}
+    {# Sets the light/dark mode before first paint, as mode-watcher's own head
+       script does (`setInitialMode` in mode-watcher 1.1, with the settings of
+       `<ModeWatcher defaultMode="dark">` in the layouts). It lives here, not
+       in the Svelte head, because only this template receives the request's
+       CSP nonce; both layouts pass `disableHeadScriptInjection`. #}
+    <script{% if let Some(nonce) = nonce %} nonce="{{ nonce }}"{% endif %}>
+      (function () {
+        var root = document.documentElement;
+        var mode = localStorage.getItem('mode-watcher-mode') || 'dark';
+        var light =
+          mode === 'light' ||
+          (mode === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
+        root.classList.toggle('dark', !light);
+        root.style.colorScheme = light ? 'light' : 'dark';
+        localStorage.setItem('mode-watcher-mode', mode);
+      })();
+    </script>
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    {{ title }}
+    {{ head }}
+    {# An application script runs under the page's policy with the request's nonce:
+       {% if let Some(nonce) = nonce %}<script nonce="{{ nonce }}" src="/js/app.js"></script>{% endif %} #}
+  </head>
+  <body>
+    {{ body }}
+  </body>
+</html>
