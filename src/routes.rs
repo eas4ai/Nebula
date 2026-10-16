@@ -6,8 +6,6 @@ use crate::middleware;
 routes! {
     // Public routes
     get!("/", controllers::home::index),
-    post!("/robots.txt", controllers::home::violation_robots),
-    post!("/sitemap.xml", controllers::home::violation_sitemap),
 
     // Vite's manifest references bundles under /assets. The branding files
     // at the web root are served by `static_files::BrandingFiles`, a global
