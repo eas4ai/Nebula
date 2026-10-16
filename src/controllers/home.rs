@@ -1,4 +1,4 @@
-use suprnova::{Head, InertiaProps, Request, Response, handler, inertia_response};
+use suprnova::{InertiaProps, Request, Response, handler, inertia_response};
 
 use crate::markdown;
 
@@ -28,7 +28,7 @@ pub fn markdown_twin() -> String {
 pub async fn index(req: Request) -> Response {
     // Name the Markdown twin for crawlers. With `serverHead`, the client
     // adds and removes the link as visitors move between pages.
-    Head::try_update(|head| head.link_tag(markdown::alternate(markdown::HOME)))?;
+    markdown::advertise(markdown::HOME)?;
     // Typed, so `suprnova generate-types` pairs the page with `HomeProps`.
     let props: HomeProps = content();
     inertia_response!(&req, "Home", props)

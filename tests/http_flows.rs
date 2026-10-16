@@ -1314,6 +1314,26 @@ async fn twin_010_llms_txt_lists_the_twins() {
     );
 }
 
+/// The heading comes from `APP_NAME`, not from the `Nebula` fallback.
+#[tokio::test]
+async fn twin_010_llms_txt_heading_follows_app_name() {
+    let mut harness = setup().await;
+    // SAFETY: as in `twin_010_llms_txt_lists_the_twins`. The `APP_NAME`
+    // tests set it themselves.
+    unsafe {
+        std::env::set_var("APP_NAME", "Acme Docs");
+    }
+    let mut client = Client::new(harness.spawn_app().await);
+
+    let index = client.get("/llms.txt").await;
+    let lines: Vec<&str> = index.body.lines().collect();
+    assert!(
+        lines.contains(&"# Acme Docs"),
+        "the heading ignores APP_NAME: {}",
+        index.body
+    );
+}
+
 #[tokio::test]
 async fn twin_011_trailing_slash_in_app_url() {
     let mut harness = setup().await;
