@@ -135,16 +135,30 @@ defaults. Change a token there and every component follows. Keep each
 
 **Components.** shadcn-svelte copies components into
 `frontend/src/lib/components/ui/`; they are your code from then on. Add
-one with `cd frontend && ./node_modules/.bin/shadcn-svelte add <name>`.
+one with `cd frontend && ./node_modules/.bin/shadcn-svelte add <name>`. The
+CLI lists the packages a component needs under `devDependencies`; move them
+to `dependencies`, because the SSR worker imports them at run time and a
+production install may leave out dev packages.
 Nebula's own pieces (layouts, `Head`, `SubmitButton`, the user menu, flash
 toasts) live in `frontend/src/lib/layouts/` and `frontend/src/lib/components/`.
 Sign-in pages (`pages/auth/*`) use the guest layout and every other page the
-app layout; `frontend/src/main.ts` and `ssr.ts` pick it.
+app layout; `frontend/src/main.ts` and `ssr.ts` pick it. A page that exports
+its own `layout` from `<script module>` gets neither; that layout must render
+`<ModeWatcher defaultMode="dark" disableHeadScriptInjection />` and
+`<FlashToaster />`, or the page loses mode tracking and flash toasts.
+
+**Forms.** Submit every form with `SubmitButton`, not a plain
+`<Button type="submit">`. Pages are server-rendered, so a form shows before
+the browser has run the page's code; a click or Enter in that gap submits the
+form itself, the request misses the Inertia handler and the typed input is
+lost. `SubmitButton` stays disabled until the page is ready, and while the
+form is processing.
 
 **Rendered Markdown.** Render Markdown on the server with Suprnova's
 `Str::markdown(source, &MarkdownRenderer::default())`
-(`suprnova::content::MarkdownRenderer`), which escapes raw HTML and unsafe
-links by default, and pass the HTML to the page as a prop. Show it with
+(`suprnova::content::MarkdownRenderer`), which by default drops raw HTML
+from the source and sanitizes the output, so scripts, event handlers and
+unsafe URLs never reach the page. Pass the HTML to the page as a prop. Show it with
 `<article class="prose prose-theme">{@html html}</article>`: the
 `@tailwindcss/typography` plugin lays it out, and `prose-theme` in
 `frontend/src/app.css` takes its colors from the theme tokens, so it follows
