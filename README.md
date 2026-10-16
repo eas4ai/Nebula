@@ -117,7 +117,7 @@ keep it in sync with how you actually reach the app. `.env.example` sets
 `http://localhost:8080`, matching `SERVER_PORT`. Unset, development and
 test runs fall back to `http://localhost:8765`, and production refuses to
 start: there it must be an absolute `http://` or `https://` URL with a
-host. If you serve the kit on a named TLS dev URL via `suprnova dev:tls`,
+host, and a loopback host such as `localhost` starts with a warning. If you serve the kit on a named TLS dev URL via `suprnova dev:tls`,
 set `APP_URL=https://<name>.localhost` so emailed links land on the right
 origin.
 
