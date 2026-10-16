@@ -108,7 +108,7 @@ pub async fn register() {
 /// manifest is missing.
 pub fn register_http_stack() {
     try_register_http_stack()
-        .expect("HTTP stack: check the SECURITY_HEADERS settings; production also needs a built frontend manifest");
+        .expect("HTTP stack: check APP_URL and the SECURITY_HEADERS settings; production also needs a built frontend manifest");
 }
 
 /// The HTTP stack, returning its errors. `tests/http_flows.rs` calls this to
@@ -122,6 +122,10 @@ pub fn register_http_stack() {
 /// a stale client); the request timeout between the Inertia layer and CSRF;
 /// CSRF after the session it reads.
 pub fn try_register_http_stack() -> Result<(), FrameworkError> {
+    // Production refuses to start without its public address, before
+    // anything is registered.
+    crate::controllers::require_app_url()?;
+
     // Response security headers and the per-request CSP nonce, outermost so
     // every response is covered. `SECURITY_HEADERS` picks the preset
     // (`balanced` when unset).

@@ -16,6 +16,30 @@ pub(crate) fn app_url() -> String {
     std::env::var("APP_URL").unwrap_or_else(|_| "http://localhost:8765".into())
 }
 
+/// Refuse to serve in production without a usable `APP_URL`: an absolute
+/// `http://` or `https://` URL with a host. Emailed links, the canonical
+/// link, the sitemap and `/llms.txt` are all built from it, and the
+/// localhost fallback would point them at this machine. Outside production
+/// the fallback stands.
+pub(crate) fn require_app_url() -> Result<(), FrameworkError> {
+    if !suprnova::Config::is_production() {
+        return Ok(());
+    }
+    let value = std::env::var("APP_URL").unwrap_or_default();
+    let usable = ["http://", "https://"].iter().any(|scheme| {
+        value
+            .strip_prefix(scheme)
+            .is_some_and(|rest| !rest.is_empty() && !rest.starts_with('/'))
+    });
+    if usable {
+        Ok(())
+    } else {
+        Err(FrameworkError::internal(
+            "APP_URL: production needs the app's public address, an absolute http:// or https:// URL such as https://example.com",
+        ))
+    }
+}
+
 /// The app's name, for `/llms.txt` and the Open Graph site name. `APP_NAME`
 /// or `Nebula`.
 pub(crate) fn app_name() -> String {
