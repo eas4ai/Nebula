@@ -10,18 +10,27 @@
 //! `bootstrap::try_register_http_stack`). Their responses are publicly
 //! cacheable, so they must never start a session or carry a cookie.
 //!
-//! Rules for every page you add here and every source you write:
+//! The four rules for every page you add here and every source or
+//! middleware you write:
 //!
-//! 1. Return Markdown only for pages anyone may read, decided on each request
-//!    from current data. These middlewares run before the router's sign-in
-//!    and permission checks.
-//! 2. Serve twins of pages that can stop being public (unpublished, deleted,
-//!    made private) with `MarkdownMiddleware::max_age(0)`.
-//! 3. A source that reads a database must limit its own time: twins run
-//!    outside the request timeout.
+//! 1. Public pages only. Return Markdown only for pages anyone may read,
+//!    decided on each request from current data. These middlewares run
+//!    before the router's sign-in and permission checks.
+//! 2. Caching. Serve twins of pages that can stop being public
+//!    (unpublished, deleted, made private) with
+//!    `MarkdownMiddleware::max_age(0)`.
+//! 3. Methods and errors. Answer only `GET` and `HEAD`, and answer a failed
+//!    lookup with a 500 that hides the error text. The plugin does both for
+//!    twins; [`LlmsTxt`] checks the method itself.
+//! 4. No cookies. Keep both middlewares before the session middleware.
+//!
+//! A source that reads a database must also limit its own time: twins run
+//! outside the request timeout.
 
 use suprnova::head::LinkTag;
-use suprnova::{FrameworkError, HttpResponse, Middleware, Next, Request, Response, async_trait};
+use suprnova::{
+    FrameworkError, Head, HttpResponse, Middleware, Next, Request, Response, async_trait,
+};
 use suprnova_markdown::MarkdownSource;
 
 use crate::controllers::{app_url, home};
@@ -55,10 +64,23 @@ pub fn twin_path(page_path: &str) -> String {
     format!("{page_path}.md")
 }
 
-/// The `<link rel="alternate" type="text/markdown">` a page with a twin puts
-/// in its head, through `Head::try_update`.
-pub fn alternate(page_path: &str) -> LinkTag {
-    LinkTag::new("alternate", twin_path(page_path)).attribute("type", "text/markdown")
+/// The `<link rel="alternate" type="text/markdown">` naming a page's twin,
+/// or `None` when [`PAGES`] does not list the page.
+pub fn alternate(page_path: &str) -> Option<LinkTag> {
+    PAGES
+        .iter()
+        .any(|page| page.path == page_path)
+        .then(|| LinkTag::new("alternate", twin_path(page_path)).attribute("type", "text/markdown"))
+}
+
+/// Names the page's twin in its head, so crawlers can find it. Call it from
+/// the handler of each page in [`PAGES`]. A path [`PAGES`] does not list
+/// gets no link, so a page never names a twin that does not exist.
+pub fn advertise(page_path: &str) -> Result<(), FrameworkError> {
+    if let Some(link) = alternate(page_path) {
+        Head::try_update(|head| head.link_tag(link))?;
+    }
+    Ok(())
 }
 
 /// Serves the twins of [`PAGES`]. Any other path is `Ok(None)`, and the
@@ -139,6 +161,17 @@ mod tests {
         for path in ["/index", "/", "/login", "/dashboard", "/index.html/"] {
             let twin = PublicPages.markdown(path).await.expect("lookup");
             assert_eq!(twin, None, "{path} has no twin");
+        }
+    }
+
+    #[test]
+    fn only_listed_pages_get_an_alternate_link() {
+        assert_eq!(
+            alternate(HOME),
+            Some(LinkTag::new("alternate", "/index.html.md").attribute("type", "text/markdown"))
+        );
+        for path in ["/", "/login", "/index.html.md"] {
+            assert_eq!(alternate(path), None, "{path} is not listed");
         }
     }
 
