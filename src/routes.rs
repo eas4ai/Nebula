@@ -6,6 +6,9 @@ use crate::middleware;
 routes! {
     // Public routes
     get!("/", controllers::home::index),
+    get!("/index.html.md", controllers::home::violation_twin),
+    post!("/index.html.md", controllers::home::violation_markdown),
+    get!("/login.md", controllers::home::violation_markdown),
 
     // Vite's manifest references bundles under /assets; branding files at
     // the web root keep their explicit whitelist below.

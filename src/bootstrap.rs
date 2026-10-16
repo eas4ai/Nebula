@@ -122,6 +122,7 @@ pub fn try_register_http_stack() -> Result<(), FrameworkError> {
     // Response security headers and the per-request CSP nonce, outermost so
     // every response is covered. `SECURITY_HEADERS` picks the preset
     // (`balanced` when unset).
+    global_middleware!(crate::controllers::home::ViolationLlms);
     global_middleware!(SecurityHeaders::from_env()?);
 
     // Global middleware (runs on every request in registration order)
