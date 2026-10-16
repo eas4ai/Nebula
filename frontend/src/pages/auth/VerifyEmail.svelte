@@ -1,35 +1,25 @@
 <script lang="ts">
   import { useForm } from '@inertiajs/svelte'
-  import { Alert, Button, Card } from 'sv5ui'
-  import AuthEmblem from '../../lib/AuthEmblem.svelte'
+  import Link2OffIcon from '@lucide/svelte/icons/link-2-off'
+  import MailCheckIcon from '@lucide/svelte/icons/mail-check'
+  import Head from '$lib/components/Head.svelte'
+  import SubmitButton from '$lib/components/SubmitButton.svelte'
+  import * as Alert from '$lib/components/ui/alert/index.js'
+  import * as Card from '$lib/components/ui/card/index.js'
 
   // `status` is set by the server: `"invalid-or-expired"` when a bad token
-  // landed on the verify route, `null` otherwise. A successful verify
-  // redirects to the dashboard and a successful resend redirects back here
-  // without a status key, so the "link sent" confirmation keys off a local
-  // flag instead.
+  // landed on the verify route, `null` otherwise. A successful resend
+  // redirects back here without a status key, so the "link sent" notice keys
+  // off a local flag instead.
   let { status }: { status: string | null } = $props()
 
-  const statusAlerts: Record<
-    string,
-    { color: 'success' | 'error'; icon: string; title: string }
-  > = {
-    'invalid-or-expired': {
-      color: 'error',
-      icon: 'lucide:link-2-off',
-      title:
-        'That verification link is invalid or has expired. Request a fresh one below.',
-    },
-  }
-
-  const statusAlert = $derived(status ? (statusAlerts[status] ?? null) : null)
+  const linkInvalid = $derived(status === 'invalid-or-expired')
 
   const resendForm = useForm({})
   const logoutForm = useForm({})
 
-  // Tracks "a fresh link was sent" across submits. `resendForm.wasSuccessful`
-  // sticks once set, so a later failed resend would keep showing the success
-  // banner; this flag clears at submit start and persists otherwise.
+  // Tracks "a fresh link was sent" across submits: cleared at submit start,
+  // set on success (`resendForm.wasSuccessful` would stick after a failure).
   let linkSent = $state(false)
 
   function resend(e: SubmitEvent) {
@@ -49,59 +39,40 @@
   }
 </script>
 
-<div class="flex justify-center px-4 py-12 sm:py-16">
-  <Card class="w-full max-w-md">
-    <div class="space-y-5 text-center">
-      <AuthEmblem />
+<Head title="Verify email" />
 
-      <div class="space-y-1">
-        <h1 class="text-xl font-semibold text-on-surface">
-          Verify your email address
-        </h1>
-        <p class="text-sm text-on-surface-variant">
-          Before continuing, please check your inbox for a verification link.
-          If you didn't receive the email, we'll gladly send you another.
-        </p>
-      </div>
+<Card.Root>
+  <Card.Header class="text-center">
+    <Card.Title class="text-xl">Verify your email address</Card.Title>
+    <Card.Description>
+      Before continuing, please check your inbox for a verification link. If you
+      didn't receive the email, we'll gladly send you another.
+    </Card.Description>
+  </Card.Header>
+  <Card.Content class="flex flex-col gap-5">
+    {#if linkInvalid}
+      <Alert.Root variant="destructive">
+        <Link2OffIcon />
+        <Alert.Title>
+          That verification link is invalid or has expired. Request a fresh one below.
+        </Alert.Title>
+      </Alert.Root>
+    {:else if linkSent}
+      <Alert.Root>
+        <MailCheckIcon />
+        <Alert.Title>A fresh verification link has been sent to your email address.</Alert.Title>
+      </Alert.Root>
+    {/if}
 
-      {#if statusAlert}
-        <Alert
-          color={statusAlert.color}
-          variant="soft"
-          icon={statusAlert.icon}
-          title={statusAlert.title}
-          class="text-left"
-        />
-      {:else if linkSent}
-        <Alert
-          color="success"
-          variant="soft"
-          icon="lucide:mail-check"
-          title="A fresh verification link has been sent to your email address."
-          class="text-left"
-        />
-      {/if}
-
-      <form onsubmit={resend}>
-        <Button
-          type="submit"
-          block
-          label="Resend verification email"
-          loading={resendForm.processing}
-        />
-      </form>
-    </div>
-
-    {#snippet footer()}
-      <form class="text-center" onsubmit={logout}>
-        <Button
-          type="submit"
-          variant="link"
-          color="surface"
-          label="Log out"
-          loading={logoutForm.processing}
-        />
-      </form>
-    {/snippet}
-  </Card>
-</div>
+    <form onsubmit={resend}>
+      <SubmitButton class="w-full" processing={resendForm.processing}>
+        Resend verification email
+      </SubmitButton>
+    </form>
+  </Card.Content>
+  <Card.Footer class="justify-center">
+    <form onsubmit={logout}>
+      <SubmitButton variant="link" processing={logoutForm.processing}>Log out</SubmitButton>
+    </form>
+  </Card.Footer>
+</Card.Root>

@@ -1,14 +1,20 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import { Link, useForm } from '@inertiajs/svelte'
-  import { Alert, Button, Card, FormField, Input } from 'sv5ui'
-  import AuthEmblem from '../../lib/AuthEmblem.svelte'
+  import Link2OffIcon from '@lucide/svelte/icons/link-2-off'
+  import Head from '$lib/components/Head.svelte'
+  import SubmitButton from '$lib/components/SubmitButton.svelte'
+  import * as Alert from '$lib/components/ui/alert/index.js'
+  import { buttonVariants } from '$lib/components/ui/button/index.js'
+  import * as Card from '$lib/components/ui/card/index.js'
+  import * as Field from '$lib/components/ui/field/index.js'
+  import { Input } from '$lib/components/ui/input/index.js'
+  import { fieldError } from '$lib/forms.js'
 
   let { token }: { token: string } = $props()
 
   // The reset token is fixed for the life of this page (it comes from the
-  // one-shot emailed link), so seed the form with its initial value. `untrack`
-  // makes that intent explicit and silences the state-referenced-locally hint.
+  // one-shot emailed link), so seed the form with its initial value.
   const form = useForm({
     token: untrack(() => token),
     password: '',
@@ -20,86 +26,61 @@
     form.post('/reset-password')
   }
 
-  // A `token` error means the link is consumed or expired - no resubmit with
-  // this token can ever succeed, so the form is replaced with a CTA to
-  // request a fresh link.
+  // A `token` error means the link is used or expired - no resubmit with this
+  // token can succeed, so the form is replaced with a link to request a new one.
   const tokenError = $derived(form.errors.token?.[0] ?? null)
 </script>
 
-<div class="flex justify-center px-4 py-12 sm:py-16">
-  <Card class="w-full max-w-md">
-    {#snippet header()}
-      <AuthEmblem />
-      <h1 class="mt-3 text-center text-xl font-semibold text-on-surface">
-        Reset your password
-      </h1>
-      <p class="mt-1 text-center text-sm text-on-surface-variant">
-        Choose a new password for your account.
-      </p>
-    {/snippet}
+<Head title="Reset password" />
 
-    <div class="space-y-5">
-      {#if tokenError}
-        <Alert
-          color="error"
-          variant="soft"
-          icon="lucide:link-2-off"
-          title={tokenError}
-        />
-
-        <Link
-          href="/forgot-password"
-          class="block rounded-lg bg-primary px-3 py-2 text-center text-sm font-medium text-on-primary transition-opacity hover:opacity-90"
-        >
-          Request a new link
-        </Link>
-      {:else}
-        <form class="space-y-5" onsubmit={submit}>
-          <FormField
-            name="password"
-            label="New password"
+<Card.Root>
+  <Card.Header class="text-center">
+    <Card.Title class="text-xl">Reset your password</Card.Title>
+    <Card.Description>Choose a new password for your account.</Card.Description>
+  </Card.Header>
+  <Card.Content class="flex flex-col gap-5">
+    {#if tokenError}
+      <Alert.Root variant="destructive">
+        <Link2OffIcon />
+        <Alert.Title>{tokenError}</Alert.Title>
+      </Alert.Root>
+      <Link href="/forgot-password" class={buttonVariants({ class: 'w-full' })}>
+        Request a new link
+      </Link>
+    {:else}
+      <form class="flex flex-col gap-5" onsubmit={submit}>
+        <Field.Field data-invalid={!!form.errors.password}>
+          <Field.Label for="password">New password</Field.Label>
+          <Input
+            id="password"
+            type="password"
+            autocomplete="new-password"
             required
-            help="At least 8 characters."
-            error={form.errors.password?.[0]}
-          >
-            <Input
-              type="password"
-              autocomplete="new-password"
-              required
-              bind:value={form.password}
-            />
-          </FormField>
-
-          <FormField
-            name="password_confirmation"
-            label="Confirm new password"
-            required
-            error={form.errors.password_confirmation?.[0]}
-          >
-            <Input
-              type="password"
-              autocomplete="new-password"
-              required
-              bind:value={form.password_confirmation}
-            />
-          </FormField>
-
-          <Button
-            type="submit"
-            block
-            label="Reset password"
-            loading={form.processing}
+            aria-invalid={!!form.errors.password}
+            bind:value={form.password}
           />
-        </form>
-      {/if}
-    </div>
+          <Field.Description>At least 8 characters.</Field.Description>
+          <Field.Error errors={fieldError(form.errors.password)} />
+        </Field.Field>
 
-    {#snippet footer()}
-      <p class="text-center text-sm text-on-surface-variant">
-        <Link href="/login" class="font-medium text-primary hover:underline">
-          Back to sign in
-        </Link>
-      </p>
-    {/snippet}
-  </Card>
-</div>
+        <Field.Field data-invalid={!!form.errors.password_confirmation}>
+          <Field.Label for="password_confirmation">Confirm new password</Field.Label>
+          <Input
+            id="password_confirmation"
+            type="password"
+            autocomplete="new-password"
+            required
+            aria-invalid={!!form.errors.password_confirmation}
+            bind:value={form.password_confirmation}
+          />
+          <Field.Error errors={fieldError(form.errors.password_confirmation)} />
+        </Field.Field>
+
+        <SubmitButton class="w-full" processing={form.processing}>Reset password</SubmitButton>
+      </form>
+    {/if}
+  </Card.Content>
+  <Card.Footer class="justify-center text-sm">
+    <Link href="/login" class="text-primary underline-offset-4 hover:underline">Back to sign in</Link>
+  </Card.Footer>
+</Card.Root>

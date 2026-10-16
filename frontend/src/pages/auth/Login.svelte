@@ -1,7 +1,13 @@
 <script lang="ts">
   import { Link, useForm } from '@inertiajs/svelte'
-  import { Button, Card, Checkbox, FormField, Input } from 'sv5ui'
-  import AuthEmblem from '../../lib/AuthEmblem.svelte'
+  import Head from '$lib/components/Head.svelte'
+  import SubmitButton from '$lib/components/SubmitButton.svelte'
+  import * as Card from '$lib/components/ui/card/index.js'
+  import { Checkbox } from '$lib/components/ui/checkbox/index.js'
+  import * as Field from '$lib/components/ui/field/index.js'
+  import { Input } from '$lib/components/ui/input/index.js'
+  import { Label } from '$lib/components/ui/label/index.js'
+  import { fieldError } from '$lib/forms.js'
 
   const form = useForm({
     email: '',
@@ -15,68 +21,57 @@
   }
 </script>
 
-<div class="flex justify-center px-4 py-12 sm:py-16">
-  <Card class="w-full max-w-md">
-    {#snippet header()}
-      <AuthEmblem />
-      <h1 class="mt-3 text-center text-xl font-semibold text-on-surface">
-        Sign in to Nebula
-      </h1>
-      <p class="mt-1 text-center text-sm text-on-surface-variant">
-        Welcome back. Enter your credentials to continue.
-      </p>
-    {/snippet}
+<Head title="Log in" />
 
-    <form class="space-y-5" onsubmit={submit}>
-      <FormField
-        name="email"
-        label="Email address"
-        required
-        error={form.errors.email?.[0]}
-      >
+<Card.Root>
+  <Card.Header class="text-center">
+    <Card.Title class="text-xl">Sign in to Nebula</Card.Title>
+    <Card.Description>Welcome back. Enter your credentials to continue.</Card.Description>
+  </Card.Header>
+  <Card.Content>
+    <form class="flex flex-col gap-5" onsubmit={submit}>
+      <Field.Field data-invalid={!!form.errors.email}>
+        <Field.Label for="email">Email address</Field.Label>
         <Input
+          id="email"
           type="email"
           autocomplete="email"
           placeholder="you@example.com"
           required
+          aria-invalid={!!form.errors.email}
           bind:value={form.email}
         />
-      </FormField>
+        <Field.Error errors={fieldError(form.errors.email)} />
+      </Field.Field>
 
-      <FormField
-        name="password"
-        label="Password"
-        required
-        error={form.errors.password?.[0]}
-      >
+      <Field.Field data-invalid={!!form.errors.password}>
+        <div class="flex items-center justify-between">
+          <Field.Label for="password">Password</Field.Label>
+          <Link href="/forgot-password" class="text-sm text-primary underline-offset-4 hover:underline">
+            Forgot your password?
+          </Link>
+        </div>
         <Input
+          id="password"
           type="password"
           autocomplete="current-password"
           required
+          aria-invalid={!!form.errors.password}
           bind:value={form.password}
         />
-      </FormField>
+        <Field.Error errors={fieldError(form.errors.password)} />
+      </Field.Field>
 
-      <div class="flex items-center justify-between">
-        <Checkbox label="Remember me" bind:checked={form.remember} />
-        <Link
-          href="/forgot-password"
-          class="text-sm font-medium text-primary hover:underline"
-        >
-          Forgot your password?
-        </Link>
+      <div class="flex items-center gap-2">
+        <Checkbox id="remember" bind:checked={form.remember} />
+        <Label for="remember">Remember me</Label>
       </div>
 
-      <Button type="submit" block label="Sign in" loading={form.processing} />
+      <SubmitButton class="w-full" processing={form.processing}>Sign in</SubmitButton>
     </form>
-
-    {#snippet footer()}
-      <p class="text-center text-sm text-on-surface-variant">
-        Don't have an account?
-        <Link href="/register" class="font-medium text-primary hover:underline">
-          Register
-        </Link>
-      </p>
-    {/snippet}
-  </Card>
-</div>
+  </Card.Content>
+  <Card.Footer class="justify-center text-sm text-muted-foreground">
+    Don't have an account?
+    <Link href="/register" class="ml-1 text-primary underline-offset-4 hover:underline">Register</Link>
+  </Card.Footer>
+</Card.Root>

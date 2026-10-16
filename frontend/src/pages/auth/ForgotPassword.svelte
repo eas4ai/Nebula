@@ -1,14 +1,20 @@
 <script lang="ts">
   import { Link, useForm } from '@inertiajs/svelte'
-  import { Alert, Button, Card, FormField, Input } from 'sv5ui'
-  import AuthEmblem from '../../lib/AuthEmblem.svelte'
+  import MailIcon from '@lucide/svelte/icons/mail'
+  import Head from '$lib/components/Head.svelte'
+  import SubmitButton from '$lib/components/SubmitButton.svelte'
+  import * as Alert from '$lib/components/ui/alert/index.js'
+  import * as Card from '$lib/components/ui/card/index.js'
+  import * as Field from '$lib/components/ui/field/index.js'
+  import { Input } from '$lib/components/ui/input/index.js'
+  import { fieldError } from '$lib/forms.js'
 
   const form = useForm({
     email: '',
   })
 
   // Tracks "a reset link was sent" across submits. `form.wasSuccessful` sticks
-  // once set, so a later failed submit would show the success banner alongside
+  // once set, so a later failed submit would show the success notice next to
   // a field error; this flag clears at submit start and persists otherwise.
   let linkSent = $state(false)
 
@@ -24,61 +30,46 @@
   }
 </script>
 
-<div class="flex justify-center px-4 py-12 sm:py-16">
-  <Card class="w-full max-w-md">
-    {#snippet header()}
-      <AuthEmblem />
-      <h1 class="mt-3 text-center text-xl font-semibold text-on-surface">
-        Forgot your password?
-      </h1>
-      <p class="mt-1 text-center text-sm text-on-surface-variant">
-        Enter your email address and we'll send you a link to reset it.
-      </p>
-    {/snippet}
+<Head title="Forgot password" />
 
-    <div class="space-y-5">
-      {#if linkSent}
-        <Alert
-          color="success"
-          variant="soft"
-          icon="lucide:mail"
-          title="Check your inbox"
-          description="If that email address is in our system, a password reset link is on its way."
-        />
-      {/if}
+<Card.Root>
+  <Card.Header class="text-center">
+    <Card.Title class="text-xl">Forgot your password?</Card.Title>
+    <Card.Description>
+      Enter your email address and we'll send you a link to reset it.
+    </Card.Description>
+  </Card.Header>
+  <Card.Content class="flex flex-col gap-5">
+    {#if linkSent}
+      <Alert.Root>
+        <MailIcon />
+        <Alert.Title>Check your inbox</Alert.Title>
+        <Alert.Description>
+          If that email address is in our system, a password reset link is on its way.
+        </Alert.Description>
+      </Alert.Root>
+    {/if}
 
-      <form class="space-y-5" onsubmit={submit}>
-        <FormField
-          name="email"
-          label="Email address"
+    <form class="flex flex-col gap-5" onsubmit={submit}>
+      <Field.Field data-invalid={!!form.errors.email}>
+        <Field.Label for="email">Email address</Field.Label>
+        <Input
+          id="email"
+          type="email"
+          autocomplete="email"
+          placeholder="you@example.com"
           required
-          error={form.errors.email?.[0]}
-        >
-          <Input
-            type="email"
-            autocomplete="email"
-            placeholder="you@example.com"
-            required
-            bind:value={form.email}
-          />
-        </FormField>
-
-        <Button
-          type="submit"
-          block
-          label="Email password reset link"
-          loading={form.processing}
+          aria-invalid={!!form.errors.email}
+          bind:value={form.email}
         />
-      </form>
-    </div>
+        <Field.Error errors={fieldError(form.errors.email)} />
+      </Field.Field>
 
-    {#snippet footer()}
-      <p class="text-center text-sm text-on-surface-variant">
-        Remembered it after all?
-        <Link href="/login" class="font-medium text-primary hover:underline">
-          Back to sign in
-        </Link>
-      </p>
-    {/snippet}
-  </Card>
-</div>
+      <SubmitButton class="w-full" processing={form.processing}>Email password reset link</SubmitButton>
+    </form>
+  </Card.Content>
+  <Card.Footer class="justify-center text-sm text-muted-foreground">
+    Remembered it after all?
+    <Link href="/login" class="ml-1 text-primary underline-offset-4 hover:underline">Back to sign in</Link>
+  </Card.Footer>
+</Card.Root>
