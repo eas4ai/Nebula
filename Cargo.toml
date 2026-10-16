@@ -39,6 +39,9 @@ clap = { version = "4", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 validator = { version = "0.20", features = ["derive"] }
 tracing = "0.1"
+# Parses APP_URL for the production boot check (src/controllers/mod.rs).
+# Suprnova already builds it.
+url = "2"
 # Markdown twins of public pages for crawlers that do not run JavaScript
 # (src/markdown.rs). It names the framework with the same tag, so both
 # resolve to one `suprnova`.
