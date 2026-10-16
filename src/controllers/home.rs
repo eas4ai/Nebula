@@ -29,5 +29,7 @@ pub async fn index(req: Request) -> Response {
     // Name the Markdown twin for crawlers. With `serverHead`, the client
     // adds and removes the link as visitors move between pages.
     Head::try_update(|head| head.link_tag(markdown::alternate(markdown::HOME)))?;
-    inertia_response!(&req, "Home", content())
+    // Typed, so `suprnova generate-types` pairs the page with `HomeProps`.
+    let props: HomeProps = content();
+    inertia_response!(&req, "Home", props)
 }
