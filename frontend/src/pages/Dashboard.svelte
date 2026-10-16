@@ -13,7 +13,7 @@
 
   <Card.Root>
     <Card.Header>
-      <Card.Title>Welcome, {user.name}!</Card.Title>
+      <Card.Title><h2>Welcome, {user.name}!</h2></Card.Title>
       <Card.Description>You are logged in.</Card.Description>
     </Card.Header>
     <Card.Content class="text-sm text-muted-foreground">Email: {user.email}</Card.Content>

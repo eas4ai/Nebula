@@ -35,7 +35,7 @@
 
 <Card.Root>
   <Card.Header class="text-center">
-    <Card.Title class="text-xl">Reset your password</Card.Title>
+    <Card.Title class="text-xl"><h1>Reset your password</h1></Card.Title>
     <Card.Description>Choose a new password for your account.</Card.Description>
   </Card.Header>
   <Card.Content class="flex flex-col gap-5">

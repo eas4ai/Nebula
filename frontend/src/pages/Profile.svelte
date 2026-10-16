@@ -75,7 +75,7 @@
   -->
   <Card.Root>
     <Card.Header>
-      <Card.Title>Profile information</Card.Title>
+      <Card.Title><h2>Profile information</h2></Card.Title>
       <Card.Description>Update your account's name and email address.</Card.Description>
       <Card.Action>
         {#if email_verified}
@@ -126,7 +126,7 @@
 
   <Card.Root>
     <Card.Header>
-      <Card.Title>Update password</Card.Title>
+      <Card.Title><h2>Update password</h2></Card.Title>
       <Card.Description>Use a long, random password to keep your account secure.</Card.Description>
     </Card.Header>
     <Card.Content>
@@ -183,7 +183,7 @@
 
   <Card.Root class="border-destructive/40">
     <Card.Header>
-      <Card.Title class="text-destructive">Delete account</Card.Title>
+      <Card.Title class="text-destructive"><h2>Delete account</h2></Card.Title>
       <Card.Description>
         Once your account is deleted, all of its data is permanently removed.
       </Card.Description>

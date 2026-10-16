@@ -22,7 +22,7 @@
     <NebulaMark class="size-8" />
     <span class="text-lg">Nebula</span>
   </Link>
-  <div class="w-full max-w-sm">
+  <main class="w-full max-w-sm">
     {@render children()}
-  </div>
+  </main>
 </div>

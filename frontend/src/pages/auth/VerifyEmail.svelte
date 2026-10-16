@@ -43,7 +43,7 @@
 
 <Card.Root>
   <Card.Header class="text-center">
-    <Card.Title class="text-xl">Verify your email address</Card.Title>
+    <Card.Title class="text-xl"><h1>Verify your email address</h1></Card.Title>
     <Card.Description>
       Before continuing, please check your inbox for a verification link. If you
       didn't receive the email, we'll gladly send you another.

@@ -24,7 +24,7 @@
 
 <Card.Root>
   <Card.Header class="text-center">
-    <Card.Title class="text-xl">Create your account</Card.Title>
+    <Card.Title class="text-xl"><h1>Create your account</h1></Card.Title>
     <Card.Description>Join Nebula - it only takes a minute.</Card.Description>
   </Card.Header>
   <Card.Content>

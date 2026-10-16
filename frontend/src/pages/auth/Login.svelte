@@ -25,7 +25,7 @@
 
 <Card.Root>
   <Card.Header class="text-center">
-    <Card.Title class="text-xl">Sign in to Nebula</Card.Title>
+    <Card.Title class="text-xl"><h1>Sign in to Nebula</h1></Card.Title>
     <Card.Description>Welcome back. Enter your credentials to continue.</Card.Description>
   </Card.Header>
   <Card.Content>

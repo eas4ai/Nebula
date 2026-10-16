@@ -34,7 +34,7 @@
 
 <Card.Root>
   <Card.Header class="text-center">
-    <Card.Title class="text-xl">Forgot your password?</Card.Title>
+    <Card.Title class="text-xl"><h1>Forgot your password?</h1></Card.Title>
     <Card.Description>
       Enter your email address and we'll send you a link to reset it.
     </Card.Description>
