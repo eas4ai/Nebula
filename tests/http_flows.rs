@@ -164,6 +164,8 @@ struct Resp {
     /// separately by the client's jar).
     headers: HashMap<String, String>,
     body: String,
+    /// The body as sent, for binary files.
+    bytes: Vec<u8>,
 }
 
 impl Resp {
@@ -342,6 +344,7 @@ impl Client {
             status: parts.status.as_u16(),
             headers,
             body: String::from_utf8_lossy(&bytes).to_string(),
+            bytes: bytes.to_vec(),
         }
     }
 }
@@ -1396,4 +1399,127 @@ async fn twin_013_head_prop_names_the_twin() {
         !head.contains("text/markdown"),
         "the head prop of an Inertia visit to /login names a twin: {head}"
     );
+}
+
+// ============================================================================
+// 9. Branding files at the web root. Shared caches keep them for a day, so
+//    they must never carry a cookie. Each test name starts with the number
+//    of the requirement it checks (`static_<nnn>_…`), so keep the names.
+// ============================================================================
+
+/// The branding files at the web root, with their content types.
+const BRANDING: [(&str, &str); 7] = [
+    ("/favicon.ico", "image/x-icon"),
+    ("/favicon-16x16.png", "image/png"),
+    ("/favicon-32x32.png", "image/png"),
+    ("/android-chrome-192x192.png", "image/png"),
+    ("/android-chrome-512x512.png", "image/png"),
+    ("/apple-touch-icon.png", "image/png"),
+    ("/site.webmanifest", "application/manifest+json"),
+];
+
+/// The cache policy of the branding files: public for a day.
+const PUBLIC_DAY: &str = "public, max-age=86400";
+
+/// The bytes of a branding file in `public/`.
+fn public_file(path: &str) -> Vec<u8> {
+    let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("public")
+        .join(path.trim_start_matches('/'));
+    std::fs::read(&file).unwrap_or_else(|e| panic!("read {}: {e}", file.display()))
+}
+
+#[tokio::test]
+async fn static_001_branding_files_answer_with_a_day_long_cache() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    for (path, content_type) in BRANDING {
+        for method in ["GET", "HEAD"] {
+            let resp = client.request(method, path, None, false).await;
+            assert_eq!(resp.status, 200, "{method} {path} must serve the file");
+            assert_eq!(
+                header(&resp, "content-type"),
+                Some(content_type),
+                "{method} {path}"
+            );
+            assert_eq!(
+                header(&resp, "cache-control"),
+                Some(PUBLIC_DAY),
+                "{method} {path}"
+            );
+            if method == "GET" {
+                assert!(
+                    resp.bytes == public_file(path),
+                    "GET {path} differs from the file in public/"
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn static_002_no_cookie_on_branding_files() {
+    let mut harness = setup().await;
+    let addr = harness.spawn_app().await;
+
+    let mut visitor = Client::new(addr);
+    assert_eq!(visitor.get("/login").await.status, 200);
+    assert!(
+        visitor.cookies.contains_key("XSRF-TOKEN"),
+        "a page visit starts a session: {:?}",
+        visitor.cookies
+    );
+
+    for (path, _) in BRANDING {
+        for method in ["GET", "HEAD"] {
+            let resp = Client::new(addr).request(method, path, None, false).await;
+            assert!(
+                !resp.headers.contains_key("set-cookie"),
+                "{method} {path} without a session set a cookie: {:?}",
+                resp.headers
+            );
+            let resp = visitor.request(method, path, None, false).await;
+            assert!(
+                !resp.headers.contains_key("set-cookie"),
+                "{method} {path} with a session set a cookie: {:?}",
+                resp.headers
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn static_003_security_headers_cover_branding_files() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    for (path, _) in BRANDING {
+        let resp = client.get(path).await;
+        assert_eq!(
+            header(&resp, "x-content-type-options"),
+            Some("nosniff"),
+            "GET {path} lacks the security headers"
+        );
+    }
+}
+
+/// A guard: it also passes before the fix. It catches a later change that
+/// serves more than the listed files, or serves them to other methods.
+#[tokio::test]
+async fn static_004_only_listed_files_for_get_and_head() {
+    let mut harness = setup().await;
+    let mut client = Client::new(harness.spawn_app().await);
+
+    for path in ["/site.webmanifest.bak", "/Cargo.toml"] {
+        let resp = client.get(path).await;
+        assert_eq!(resp.status, 404, "{path} must not be served");
+    }
+
+    // A page visit first, so the POST carries a valid CSRF token and reaches
+    // whatever would answer it.
+    assert_eq!(client.get("/login").await.status, 200);
+    let post = client.post_json("/favicon.ico", json!({})).await;
+    let served = post.status == 200 && header(&post, "content-type") == Some("image/x-icon");
+    assert!(!served, "POST /favicon.ico was served the file");
 }
