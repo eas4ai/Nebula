@@ -3790,7 +3790,6 @@ dependencies = [
  "suprnova-markdown",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "url",
  "validator",
 ]
