@@ -7,22 +7,10 @@ routes! {
     // Public routes
     get!("/", controllers::home::index),
 
-    // Vite's manifest references bundles under /assets; branding files at
-    // the web root keep their explicit whitelist below.
+    // Vite's manifest references bundles under /assets. The branding files
+    // at the web root are served by `static_files::BrandingFiles`, a global
+    // middleware before the session, so they carry no cookie.
     get!("/assets/{*path}", StaticFiles::public().handler()),
-
-    // Branding files browsers and the web app manifest request at the web
-    // root. The public directory is not served implicitly, so the kit
-    // serves its small root-level whitelist through explicit routes - the
-    // same handler in dev and prod (the page origin is the Rust server in
-    // both; Vite only supplies JS/CSS).
-    get!("/favicon.ico", controllers::static_files::serve),
-    get!("/favicon-16x16.png", controllers::static_files::serve),
-    get!("/favicon-32x32.png", controllers::static_files::serve),
-    get!("/android-chrome-192x192.png", controllers::static_files::serve),
-    get!("/android-chrome-512x512.png", controllers::static_files::serve),
-    get!("/apple-touch-icon.png", controllers::static_files::serve),
-    get!("/site.webmanifest", controllers::static_files::serve),
 
     // The verification-token consume endpoint is self-contained: the token in
     // the query string is the proof, so no session is needed. Keep it public
