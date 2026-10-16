@@ -205,7 +205,8 @@ public prose page a Markdown copy, its twin, at the page's address plus
 and builds absolute links to the twins from `APP_URL`, so set both in
 production. Edit `SUMMARY` in `src/markdown.rs` to describe your app there.
 
-To add a page, add an entry to `PAGES` in `src/markdown.rs` and call
+To add a page, add an entry to `PAGES` in `src/markdown.rs` (its twin
+path, its own address for the sitemap, its title and its Markdown) and call
 `markdown::advertise(<path>)?` in its handler. `advertise` adds the head
 link only for a path that `PAGES` lists, so a page never names a twin that
 does not exist.
@@ -229,6 +230,33 @@ middleware like `LlmsTxt`, follows four rules:
 
 A source that reads the database must also limit its own time: twins run
 outside the 30-second request timeout.
+
+## Search engines and social sites
+
+Every page's `<head>` carries what search engines and social sites read,
+set from Rust in `src/seo.rs` through Suprnova's `Head` API:
+
+- a canonical link, built from `APP_URL` and the page's path, never from
+  the request's `Host`;
+- a `description`: `SUMMARY` from `src/markdown.rs`, which `/llms.txt`
+  also uses, or a page's own (Home uses its message);
+- Open Graph tags (site name from `APP_NAME`, type `website`, and the
+  image `SOCIAL_IMAGE`) and an X card;
+- `noindex` on the sign-in, password, verification, dashboard, profile and
+  error pages. Home stays indexable.
+
+Home also describes the site in JSON-LD (`WebSite` and `Organization`).
+Page titles stay in the Svelte pages.
+
+`/robots.txt` lets every crawler fetch every path and names
+`/sitemap.xml`, which lists the public pages from `PAGES` in
+`src/markdown.rs` (each entry's `href`). `robots.txt` blocks nothing on
+purpose: a crawler only sees a page's `noindex` if it may fetch the page.
+Both are served before the session, so they carry no cookie.
+
+To make it yours, edit `SUMMARY`, set `APP_NAME` and `APP_URL`, and
+replace `SOCIAL_IMAGE` (the 512 px icon) with a 1200x630 card; then
+switch the X card in `seo::register` to `TwitterCardType::SummaryLargeImage`.
 
 ## Production
 
