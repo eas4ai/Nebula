@@ -62,6 +62,7 @@ export interface VerifyEmailProps {
 
 export interface Pages {
   "Dashboard": DashboardProps;
+  "Home": HomeProps;
   "Profile": ProfileProps;
   "auth/ForgotPassword": ForgotPasswordProps;
   "auth/Login": LoginProps;
