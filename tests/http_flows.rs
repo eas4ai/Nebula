@@ -1992,6 +1992,7 @@ async fn boot_001_production_needs_app_url() {
         ("unset", None),
         ("empty", Some("")),
         ("without a scheme", Some("localhost:8080")),
+        ("without a host", Some("https://:8443")),
     ] {
         match register_with("production", app_url) {
             Ok(()) => panic!("production started with APP_URL {label}"),
@@ -2002,11 +2003,13 @@ async fn boot_001_production_needs_app_url() {
         }
     }
 
-    if let Err(error) = register_with("production", Some("https://nebula.test")) {
-        assert!(
-            !error.contains("APP_URL"),
-            "production refused a valid APP_URL: {error}"
-        );
+    for valid in ["https://nebula.test", "HTTPS://nebula.test"] {
+        if let Err(error) = register_with("production", Some(valid)) {
+            assert!(
+                !error.contains("APP_URL"),
+                "production refused the valid APP_URL {valid}: {error}"
+            );
+        }
     }
 }
 

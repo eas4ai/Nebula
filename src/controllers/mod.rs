@@ -26,16 +26,17 @@ pub(crate) fn require_app_url() -> Result<(), FrameworkError> {
         return Ok(());
     }
     let value = std::env::var("APP_URL").unwrap_or_default();
-    let usable = ["http://", "https://"].iter().any(|scheme| {
-        value
-            .strip_prefix(scheme)
-            .is_some_and(|rest| !rest.is_empty() && !rest.starts_with('/'))
+    // `Url::parse` lowercases the scheme and rejects an empty host, so
+    // `HTTPS://example.com` passes and `https://:8443` does not.
+    let usable = url::Url::parse(&value).is_ok_and(|url| {
+        matches!(url.scheme(), "http" | "https")
+            && url.host_str().is_some_and(|host| !host.is_empty())
     });
     if usable {
         Ok(())
     } else {
         Err(FrameworkError::internal(
-            "APP_URL: production needs the app's public address, an absolute http:// or https:// URL such as https://example.com",
+            "APP_URL: production needs the app's public address, an absolute http:// or https:// URL with a host, such as https://example.com",
         ))
     }
 }
