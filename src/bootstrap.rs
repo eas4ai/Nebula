@@ -115,9 +115,11 @@ pub fn register_http_stack() {
 /// serve the same stack production runs.
 ///
 /// Order matters: security headers outermost, so every response carries
-/// them; the session before Inertia (the version middleware re-flashes the
-/// session before it bounces a stale client); the request timeout between
-/// the Inertia layer and CSRF; CSRF after the session it reads.
+/// them; the Markdown twins and `/llms.txt` before the session, so those
+/// publicly cacheable responses never carry a cookie; the session before
+/// Inertia (the version middleware re-flashes the session before it bounces
+/// a stale client); the request timeout between the Inertia layer and CSRF;
+/// CSRF after the session it reads.
 pub fn try_register_http_stack() -> Result<(), FrameworkError> {
     // Response security headers and the per-request CSP nonce, outermost so
     // every response is covered. `SECURITY_HEADERS` picks the preset
@@ -126,6 +128,16 @@ pub fn try_register_http_stack() -> Result<(), FrameworkError> {
 
     // Global middleware (runs on every request in registration order)
     global_middleware!(middleware::LoggingMiddleware);
+
+    // Markdown twins of the public pages (`/index.html.md`), for crawlers
+    // that do not run JavaScript; the list is `src/markdown.rs`. Then
+    // `/llms.txt`, the index of those twins, from the same list. Both before
+    // the session: their responses are publicly cacheable, so they must never
+    // start a session or carry a cookie.
+    global_middleware!(suprnova_markdown::MarkdownMiddleware::new(
+        crate::markdown::PublicPages
+    ));
+    global_middleware!(crate::markdown::LlmsTxt);
 
     // Session middleware (required for authentication). The config is
     // cloned because the CSRF middleware below reads the same values, so
