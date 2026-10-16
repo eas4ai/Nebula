@@ -19,6 +19,7 @@ A new Suprnova app needs a lot wired together and tested before its own work can
 | http-stack.md | STACK | the global middleware stack: security headers, session and CSRF cookies, the request timeout, unmatched paths |
 | pages.md | PAGE | Home's content, the document head on first and later visits, the app's external base URL |
 | twins.md | TWIN | Markdown twins of public pages, `/llms.txt`, and the alternate link that advertises a twin |
+| static-files.md | STATIC | the branding files at the web root: favicons and the web app manifest |
 
 ## Not yet specified
 
@@ -29,7 +30,7 @@ One line per area outside the current work. Each area gets a domain file when a 
 - Password reset: request a link, reset with its token, and no account enumeration.
 - Profile: update details, change the password, delete the account.
 - Dashboard: the signed-in, verified landing page.
-- Static files: `/assets/*` and the branding files at the web root.
+- Built assets: `/assets/*`, the Vite build output.
 - UI: the shadcn-svelte layouts, theme tokens, flash toasts and the error page.
 - Server-side rendering: the SSR worker and the `ssr:*` commands.
 - Console: the `console` binary and its commands.
