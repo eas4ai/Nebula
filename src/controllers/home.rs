@@ -33,3 +33,17 @@ pub async fn index(req: Request) -> Response {
     let props: HomeProps = content();
     inertia_response!(&req, "Home", props)
 }
+
+// TEMPORARY violating examples that bind the `seo` check. Never commit.
+#[handler]
+pub async fn violation_robots(_req: Request) -> Response {
+    Ok(suprnova::HttpResponse::bytes_body("User-agent: *\n", "text/plain; charset=utf-8"))
+}
+
+#[handler]
+pub async fn violation_sitemap(_req: Request) -> Response {
+    Ok(suprnova::HttpResponse::bytes_body(
+        "<urlset></urlset>\n",
+        "application/xml; charset=utf-8",
+    ))
+}
