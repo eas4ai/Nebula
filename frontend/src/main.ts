@@ -1,7 +1,8 @@
 import './app.css'
 import { createInertiaApp } from '@inertiajs/svelte'
 import { hydrate, mount } from 'svelte'
-import Layout from './lib/Layout.svelte'
+import AppLayout from '$lib/layouts/AppLayout.svelte'
+import GuestLayout from '$lib/layouts/GuestLayout.svelte'
 
 // Exception text can include copied URLs or credentials even without request context.
 function redactBrowserText(text: string): string {
@@ -146,10 +147,10 @@ createInertiaApp({
   // `@inertiajs/vite` turns this into the page resolver: `auth/Login` loads
   // `./pages/auth/Login.svelte`, each page in its own chunk.
   pages: './pages',
-  // Persistent default layout. Inertia 3's `layout` option is a callback
-  // `(name, page) => Component`; a page can opt out or override by exporting
-  // its own `layout` from <script module>. `ssr.ts` must pass the same one.
-  layout: () => Layout,
+  // Pages under `auth/` sit in the guest frame and every other page in the
+  // app frame. A page can still export its own `layout` from
+  // <script module>. `ssr.ts` must pick the same way.
+  layout: (name) => (name.startsWith('auth/') ? GuestLayout : AppLayout),
   // Head tags a handler sets from Rust arrive as the `head` page prop; the
   // client keeps them in the document across visits.
   serverHead: true,

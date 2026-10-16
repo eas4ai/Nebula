@@ -2,7 +2,7 @@
 //!
 //! The HTTP stack shares `auth` with `App::inertia_share_lazy` (see
 //! `bootstrap::try_register_http_stack`), so [`Auth::current`] runs for each
-//! response that sends it, with that request's session. `Layout.svelte`
+//! response that sends it, with that request's session. `AppLayout.svelte`
 //! reads `page.props.auth.user` to render the user menu and the Dashboard
 //! link, or the sign-in links when it is `null`.
 

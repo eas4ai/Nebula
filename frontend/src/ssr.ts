@@ -1,5 +1,6 @@
 import { createInertiaApp } from '@inertiajs/svelte'
-import Layout from './lib/Layout.svelte'
+import AppLayout from '$lib/layouts/AppLayout.svelte'
+import GuestLayout from '$lib/layouts/GuestLayout.svelte'
 
 // `suprnova ssr:start` runs this entry's bundle under Node, and
 // `npm run build:ssr` (`vite build --ssr src/ssr.ts`) produces it at
@@ -13,6 +14,6 @@ import Layout from './lib/Layout.svelte'
 // markup the browser hydrates.
 createInertiaApp({
   pages: './pages',
-  layout: () => Layout,
+  layout: (name) => (name.startsWith('auth/') ? GuestLayout : AppLayout),
   serverHead: true,
 })
