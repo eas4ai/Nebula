@@ -1,6 +1,6 @@
 # Roadmap
 
-Current: app-url-required
+Current: app-url-localhost-warning
 
 ## markdown-twins
 
@@ -31,6 +31,14 @@ Done when: every requirement above has a current pass receipt. `cargo test --loc
 Requirements: BOOT-001, BOOT-002
 
 Delivery: on the `sudus` branch. Add the `APP_URL` check at the top of `bootstrap::try_register_http_stack`: in production, an unset, empty or non-`http(s)` `APP_URL` returns an error naming it, before anything is registered. Update `register_http_stack`'s panic text to mention `APP_URL`. The `boot_<nnn>_…` tests in `tests/http_flows.rs` are written before the start and fail until this work makes them pass. README's production section and the UPGRADE.md 3.0.0 notes say the server now refuses to start without `APP_URL` in production.
+
+Done when: every requirement above has a current pass receipt. `cargo test --locked` and `cargo clippy` pass. `README.md` and `UPGRADE.md` are updated.
+
+## app-url-localhost-warning
+
+Requirements: BOOT-003
+
+Delivery: on the `sudus` branch, after app-url-required. When the production check passes, `require_app_url` also looks at `APP_URL`'s host and, for a loopback name, logs a `tracing` warning naming `APP_URL` and saying emailed links, canonical links and the sitemap would point at this machine. The `boot_003_…` test captures the log with `tracing-subscriber`, added as a dev-dependency. README's `APP_URL` section and the UPGRADE.md 3.0.0 bullet mention the warning.
 
 Done when: every requirement above has a current pass receipt. `cargo test --locked` and `cargo clippy` pass. `README.md` and `UPGRADE.md` are updated.
 
