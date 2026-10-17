@@ -48,26 +48,30 @@ pub fn plausible() -> Option<Plausible> {
 }
 
 /// Read `PLAUSIBLE_SRC` and `PLAUSIBLE_DOMAIN`. Analytics is on only when
-/// both are set. A set `PLAUSIBLE_SRC` must be an absolute `http://` or
-/// `https://` URL with a host, or the boot stops, as `SecurityHeaders` does
-/// for its own settings.
+/// both are set. Surrounding spaces are trimmed, so a value of only spaces
+/// counts as empty, and an empty value as unset. A set `PLAUSIBLE_SRC` must be
+/// an absolute `http://` or `https://` URL on a host name or IPv4 address, and
+/// neither value may be invalid Unicode, or the boot stops, as
+/// `SecurityHeaders` does for its own settings.
 pub fn configure() -> Result<(), FrameworkError> {
-    let read = |name: &str| {
-        std::env::var(name)
-            .ok()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
+    let read = |name: &str| match std::env::var(name) {
+        Ok(value) => Ok(Some(value.trim().to_string()).filter(|value| !value.is_empty())),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(std::env::VarError::NotUnicode(_)) => Err(FrameworkError::internal(format!(
+            "{name}: expected Unicode text"
+        ))),
     };
-    let src = read("PLAUSIBLE_SRC");
+    let src = read("PLAUSIBLE_SRC")?;
+    let domain = read("PLAUSIBLE_DOMAIN")?;
     let origin = match &src {
         Some(src) => Some(script_origin(src).ok_or_else(|| {
             FrameworkError::internal(
-                "PLAUSIBLE_SRC: expected the script's absolute http:// or https:// URL, such as https://plausible.example/js/script.js",
+                "PLAUSIBLE_SRC: expected the script's absolute http:// or https:// URL on a host name or IPv4 address, such as https://plausible.example/js/script.js",
             )
         })?),
         None => None,
     };
-    let config = match (src, read("PLAUSIBLE_DOMAIN"), origin) {
+    let config = match (src, domain, origin) {
         (Some(src), Some(domain), Some(origin)) => Some(Plausible {
             src,
             domain,
@@ -79,12 +83,25 @@ pub fn configure() -> Result<(), FrameworkError> {
     Ok(())
 }
 
-/// The origin of an absolute `http(s)` URL with a host.
+/// The origin of an absolute `http(s)` URL whose host can stand in a CSP
+/// source: a host name of letters, digits and hyphens between dots, or an
+/// IPv4 address. The URL parser lets `;`, `,`, `'` and braces through in a
+/// host, and each of them would change the policy the origin is written
+/// into. A bracketed IPv6 address is not a CSP source.
 fn script_origin(src: &str) -> Option<String> {
     let url = url::Url::parse(src).ok()?;
-    let usable = matches!(url.scheme(), "http" | "https")
-        && url.host_str().is_some_and(|host| !host.is_empty());
-    usable.then(|| url.origin().ascii_serialization())
+    let host_fits = match url.host()? {
+        url::Host::Domain(name) => name.split('.').all(|label| {
+            !label.is_empty()
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        }),
+        url::Host::Ipv4(_) => true,
+        url::Host::Ipv6(_) => false,
+    };
+    (matches!(url.scheme(), "http" | "https") && host_fits)
+        .then(|| url.origin().ascii_serialization())
 }
 
 /// The security headers `SECURITY_HEADERS` selects. With analytics on and a
@@ -143,10 +160,20 @@ mod tests {
             script_origin("https://plausible.example/js/script.js").as_deref(),
             Some("https://plausible.example")
         );
+        assert_eq!(
+            script_origin("http://10.0.0.5:8000/js/script.js").as_deref(),
+            Some("http://10.0.0.5:8000")
+        );
         for bad in [
             "javascript:alert(1)",
             "https://:8443/x",
             "plausible.example/js",
+            "https://plausible.example;sandbox/js/script.js",
+            "https://plausible.example,evil/js/script.js",
+            "https://plausible'example/js/script.js",
+            "https://plausible{nonce}/js/script.js",
+            "https://[::1]/js/script.js",
+            "https://plausible.example./js/script.js",
         ] {
             assert_eq!(script_origin(bad), None, "{bad}");
         }
