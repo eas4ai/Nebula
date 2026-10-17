@@ -274,7 +274,8 @@ PLAUSIBLE_DOMAIN=example.com
 `PLAUSIBLE_SRC` is the script URL on your instance; `PLAUSIBLE_DOMAIN` is the
 site name you registered there. Every page then loads the script with the
 request's CSP nonce (`templates/app.html`). A `PLAUSIBLE_SRC` that is not an
-absolute `http://` or `https://` URL stops the boot.
+absolute `http://` or `https://` URL on a host name or IPv4 address stops the
+boot, because its origin goes into the policy below.
 
 Plausible's script posts page views to its own origin, which the default
 Content-Security-Policy blocks, so Nebula adds that origin to the policy's
