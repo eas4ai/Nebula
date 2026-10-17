@@ -285,6 +285,14 @@ the strict and balanced policies; a test compares them with the framework's
 own, so an upgrade that changes them fails the tests instead of shipping a
 stale policy.
 
+The script reports each page's full address. So the emailed password-reset
+link, `/reset-password?token=…`, renders no page: it puts the token in the
+session and redirects to `/reset-password`, and the form reads the token
+from there. This needs the session cookie to come back on that redirect,
+which the default `SESSION_SAME_SITE=lax` allows. A `strict` cookie is not
+sent on a redirect that follows a click in a mail client, so the form would
+get no token and the link would read as expired.
+
 Plausible sets no cookies, so it needs no consent banner. A tool that sets
 cookies would change that.
 

@@ -7,8 +7,9 @@
 //!   response is identical whether or not the address exists, so a caller can't
 //!   probe which emails are registered. The `PasswordReset::send_link` facade
 //!   only mails when the address resolves, but always returns `Ok`.
-//! - `GET  /reset-password?token=…` - render the new-password form, carrying the
-//!   token through as a hidden field.
+//! - `GET  /reset-password?token=…` - move the emailed token into the session
+//!   and redirect to `GET /reset-password`, which renders the new-password
+//!   form, carrying the token through as a hidden field.
 //! - `POST /reset-password` - consume the token and set the new password via
 //!   `PasswordReset::complete`. An invalid or expired token re-renders the form
 //!   with a `token` validation error rather than dumping a raw failure.
@@ -25,8 +26,8 @@
 use serde::Deserialize;
 use suprnova::auth_flows::PasswordReset;
 use suprnova::{
-    FormRequest, InertiaProps, Request, Response, Validate, ValidationErrors, handler,
-    inertia_response, redirect,
+    FormRequest, FrameworkError, InertiaProps, Request, Response, Validate, ValidationErrors,
+    handler, inertia_response, redirect,
 };
 
 use crate::controllers::{FormFailure, InertiaCtx, errors_json, inertia_form, validation_failure};
@@ -36,6 +37,9 @@ use crate::controllers::{FormFailure, InertiaCtx, errors_json, inertia_form, val
 fn reset_base() -> String {
     format!("{}/reset-password", crate::controllers::app_url())
 }
+
+/// The session key that holds the emailed token until the reset completes.
+const RESET_TOKEN: &str = "password_reset_token";
 
 /// No per-page props: flash/status feedback rides the page object, and the
 /// empty struct keeps the `inertia_response!` call shape uniform.
@@ -111,14 +115,32 @@ pub async fn send_link(req: Request) -> Response {
     redirect!("/forgot-password").into()
 }
 
-/// `GET /reset-password?token=…` - render the new-password form.
+/// `GET /reset-password` - render the new-password form.
+///
+/// The emailed link, `/reset-password?token=…`, renders no page: its token
+/// goes into the session and the browser is redirected here without it. So no
+/// page URL carries the token, and no script on the page can report it (the
+/// optional Plausible script sends `location.href` to its server). Django's
+/// password reset does the same. The redirect needs the session cookie to come
+/// back on it, which the default `SameSite=Lax` allows.
 ///
 /// The token is carried through to the page so the subsequent POST can present
 /// it back. A missing token renders an empty field; the POST then fails the
 /// token check and surfaces the standard "invalid or expired" message.
 #[handler]
 pub async fn show_reset(req: Request) -> Response {
-    let token = req.query_param("token").unwrap_or_default();
+    if let Some(token) = req.query_param("token").filter(|token| !token.is_empty()) {
+        return match suprnova::session_mut(|session| session.put(RESET_TOKEN, token)) {
+            Some(()) => redirect!("/reset-password").into(),
+            None => Err(FrameworkError::internal(
+                "password reset: no session to hold the token; SessionMiddleware must run before this route",
+            )
+            .into()),
+        };
+    }
+    let token = suprnova::session()
+        .and_then(|session| session.get::<String>(RESET_TOKEN))
+        .unwrap_or_default();
     inertia_response!(&req, "auth/ResetPassword", ResetPasswordProps { token })
 }
 
@@ -154,12 +176,15 @@ pub async fn reset(req: Request) -> Response {
     };
 
     match PasswordReset::complete(&form.token, &form.password).await {
-        Ok(_user_id) => redirect!("/login")
-            .with(
-                "success",
-                "Your password has been reset. Log in with your new password.",
-            )
-            .into(),
+        Ok(_user_id) => {
+            suprnova::session_mut(|session| session.forget(RESET_TOKEN));
+            redirect!("/login")
+                .with(
+                    "success",
+                    "Your password has been reset. Log in with your new password.",
+                )
+                .into()
+        }
         // 400 is the flow's answer for an invalid, consumed, or expired
         // token. Any other error is not about the link: a 500 can mean the
         // password already changed but the retry job that revokes the old
