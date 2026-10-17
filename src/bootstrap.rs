@@ -41,9 +41,12 @@ use crate::models::user::User;
 ///
 /// The framework hands the template its parts - `title`, `head` (the CSRF
 /// tag and the Vite tags), `body` (the page data and the mount element),
-/// `lang`, `csrf_token`, `nonce`, `ssr` and the response's `view` data - and
-/// Askama checks at compile time that it names nothing else. Put the
-/// application's own head content there: a favicon, fonts, meta tags.
+/// `lang`, `csrf_token`, `nonce`, `ssr` and the response's `view` data.
+/// Askama checks at compile time that every name it uses exists. Besides
+/// these parts, the template calls `crate::analytics::plausible()` for the
+/// optional analytics script, because the framework has no app-wide data for
+/// the root template (eas4ai/suprnova#157). Put the application's own head
+/// content there: a favicon, fonts, meta tags.
 #[suprnova::inertia_root(path = "app.html")]
 pub struct AppDocument;
 
@@ -107,7 +110,7 @@ pub async fn register() {
 /// manifest is missing.
 pub fn register_http_stack() {
     try_register_http_stack()
-        .expect("HTTP stack: check APP_URL and the SECURITY_HEADERS settings; production also needs a built frontend manifest");
+        .expect("HTTP stack: check APP_URL, PLAUSIBLE_SRC and the SECURITY_HEADERS settings; production also needs a built frontend manifest");
 }
 
 /// The HTTP stack, returning its errors. `tests/http_flows.rs` calls this to
