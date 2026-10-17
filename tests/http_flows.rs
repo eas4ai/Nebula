@@ -567,9 +567,30 @@ async fn password_reset_over_http_with_anti_enumeration() {
         "unknown email must send nothing"
     );
 
-    // The reset form renders with the token threaded through.
+    // The emailed link moves the token into the session and redirects to a
+    // URL without it, so no script on the page sees the token: the optional
+    // Plausible script reports `location.href` to its server.
     let resp = client.get(&format!("/reset-password?token={token}")).await;
+    assert_eq!(
+        resp.status, 302,
+        "the reset link must redirect: {}",
+        resp.body
+    );
+    assert_eq!(resp.location(), "/reset-password");
+
+    // The form renders at the bare URL with the token threaded through.
+    let resp = client.get("/reset-password").await;
     assert_eq!(resp.status, 200, "GET /reset-password must render");
+    assert!(
+        resp.body.contains(&format!(r#""token":"{token}""#)),
+        "the form lacks the token from the session: {}",
+        resp.body
+    );
+    assert!(
+        !resp.body.contains(&format!("token={token}")),
+        "the page still carries the token in a URL: {}",
+        resp.body
+    );
 
     // Complete the reset → 302 /login.
     let resp = client
@@ -604,6 +625,15 @@ async fn password_reset_over_http_with_anti_enumeration() {
     assert!(
         !resp.body.contains("Your password has been reset."),
         "success flash must not survive a second request: {}",
+        resp.body
+    );
+
+    // The used token leaves the session with the reset.
+    let resp = client.get("/reset-password").await;
+    assert_eq!(resp.status, 200, "GET /reset-password must render");
+    assert!(
+        resp.body.contains(r#""token":"""#),
+        "the used token is still in the session: {}",
         resp.body
     );
 
