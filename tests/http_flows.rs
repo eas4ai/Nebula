@@ -2139,12 +2139,31 @@ impl Harness {
     }
 }
 
-/// The scripts in the head whose `src` is `src`.
+/// Every `<script>` tag in the document whose `src` is `src`, however the
+/// value is quoted.
 fn scripts_from<'a>(html: &'a str, src: &str) -> Vec<&'a str> {
-    head_tags(html, "script")
-        .into_iter()
-        .filter(|tag| attr(tag, "src") == Some(src))
+    html.split('<')
+        .filter(|tag| {
+            tag.get(..6)
+                .is_some_and(|name| name.eq_ignore_ascii_case("script"))
+                && tag[6..].starts_with(|c: char| c.is_ascii_whitespace() || c == '>')
+        })
+        .map(|tag| tag.split('>').next().unwrap_or(tag))
+        .filter(|tag| script_src(tag) == Some(src))
         .collect()
+}
+
+/// A tag's `src` value, in double, single or no quotes.
+fn script_src(tag: &str) -> Option<&str> {
+    let lower = tag.to_ascii_lowercase();
+    let (at, _) = lower
+        .match_indices("src=")
+        .find(|(at, _)| lower[..*at].ends_with(|c: char| c.is_ascii_whitespace()))?;
+    let value = &tag[at + "src=".len()..];
+    match value.chars().next()? {
+        quote @ ('"' | '\'') => value[1..].split(quote).next(),
+        _ => value.split(|c: char| c.is_ascii_whitespace()).next(),
+    }
 }
 
 /// The response's Content-Security-Policy.
@@ -2277,18 +2296,30 @@ async fn analytics_004_values_are_escaped() {
 #[tokio::test]
 async fn analytics_005_a_bad_script_url_stops_the_boot() {
     let _harness = setup().await;
-    // SAFETY: serialized behind `common::TEST_LOCK`; no server runs. The next
-    // test's `setup` removes them.
-    unsafe {
-        std::env::set_var("PLAUSIBLE_SRC", "javascript:alert(1)");
-        std::env::set_var("PLAUSIBLE_DOMAIN", "nebula.test");
-    }
-    suprnova::middleware::clear_global_middleware_for_test();
-    match nebula::bootstrap::try_register_http_stack() {
-        Ok(()) => panic!("the server started with PLAUSIBLE_SRC=javascript:alert(1)"),
-        Err(error) => assert!(
-            error.to_string().contains("PLAUSIBLE_SRC"),
-            "the error does not name PLAUSIBLE_SRC: {error}"
-        ),
+    let mut bad: Vec<std::ffi::OsString> = vec![
+        "javascript:alert(1)".into(),
+        // The URL parser takes `;` in a host; in the policy it would start a
+        // `sandbox` directive.
+        "https://plausible.example;sandbox/js/script.js".into(),
+    ];
+    #[cfg(unix)]
+    bad.push(std::os::unix::ffi::OsStringExt::from_vec(
+        b"https://plausible.example/\x80".to_vec(),
+    ));
+    for value in bad {
+        // SAFETY: serialized behind `common::TEST_LOCK`; no server runs. The
+        // next test's `setup` removes them.
+        unsafe {
+            std::env::set_var("PLAUSIBLE_SRC", &value);
+            std::env::set_var("PLAUSIBLE_DOMAIN", "nebula.test");
+        }
+        suprnova::middleware::clear_global_middleware_for_test();
+        match nebula::bootstrap::try_register_http_stack() {
+            Ok(()) => panic!("the server started with PLAUSIBLE_SRC={value:?}"),
+            Err(error) => assert!(
+                error.to_string().contains("PLAUSIBLE_SRC"),
+                "{value:?}: the error does not name PLAUSIBLE_SRC: {error}"
+            ),
+        }
     }
 }
