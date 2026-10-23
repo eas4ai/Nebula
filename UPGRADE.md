@@ -1,5 +1,13 @@
 # Upgrade Guide
 
+## Nebula 3.1.0 → 3.1.1
+
+Suprnova 4.6.2 and suprnova-markdown 0.5.6, which add to the framework's
+search and error surfaces and change nothing a deployed copy of this starter
+uses. Pin `suprnova` to `tag = "v4.6.2"` and `suprnova-markdown` to
+`tag = "v0.5.6"` in `Cargo.toml`, run `cargo update -p suprnova -p suprnova-markdown`,
+and redeploy. Nothing else changes.
+
 ## Nebula 3.0.0 → 3.1.0
 
 Release `v3.1.0` upgrades Suprnova from 4.1.0 to 4.6.1 and `suprnova-markdown` from 0.3.0 to 0.5.5. It brings the kit to the current Svelte template shape while keeping Nebula's account flows, shadcn-svelte UI, branding, SEO, Markdown twins and optional Plausible analytics. Rust, frontend and npm lockfile package versions are 3.1.0. Cargo.lock resolves the framework tag to `5112862367b76a2ea3875d0135ca4ca1ec602c32` and the Markdown tag to `1d2650a315a1f424931f2362355fc8ad9dd28b45`.

@@ -22,7 +22,7 @@ production-shaped account story on day one:
   [shadcn-svelte](https://www.shadcn-svelte.com), dark by default, with the
   Nebula icon set served at the web root.
 
-The backend is Rust on Suprnova 4.6.1; the frontend is a Vite + Tailwind v4 SPA
+The backend is Rust on Suprnova 4.6.2; the frontend is a Vite + Tailwind v4 SPA
 bridged over Inertia, with server-side rendering for first visits. Everything below is wired and tested - clone it,
 rename it, build your app on top.
 
@@ -39,7 +39,7 @@ in the [Suprnova manual](https://github.com/eas4ai/suprnova/blob/main/manual/sta
 You'll need Rust (stable), Node 24+, and the Suprnova CLI:
 
 ```bash
-cargo install --git https://github.com/eas4ai/suprnova.git --tag v4.6.1 suprnova-cli
+cargo install --git https://github.com/eas4ai/suprnova.git --tag v4.6.2 suprnova-cli
 ```
 
 Then:
@@ -368,4 +368,4 @@ second points at HTTP wiring.
 
 ## Upgrading
 
-For the Suprnova 4.6.1 upgrade (Nebula 3.1.0), follow [UPGRADE.md](UPGRADE.md), including production configuration and rollback steps.
+For the Suprnova 4.6.2 upgrade (Nebula 3.1.1), follow [UPGRADE.md](UPGRADE.md), including production configuration and rollback steps.

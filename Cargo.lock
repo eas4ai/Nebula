@@ -156,7 +156,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -167,7 +167,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1577,9 +1577,9 @@ dependencies = [
 
 [[package]]
 name = "ctutils"
-version = "0.4.2"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d5515a3834141de9eafb9717ad39eea8247b5674e6066c404e8c4b365d2a29e"
+checksum = "38d28fb6aa7dd680b3ffd1a3e64e115c177bdba63c0ae7f9cd48129ff05c4fa0"
 dependencies = [
  "cmov",
 ]
@@ -1989,7 +1989,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3899,7 +3899,7 @@ dependencies = [
 
 [[package]]
 name = "nebula"
-version = "3.1.0"
+version = "3.1.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3976,7 +3976,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5626,7 +5626,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5685,7 +5685,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6368,7 +6368,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6691,8 +6691,8 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "suprnova"
-version = "4.6.1"
-source = "git+https://github.com/eas4ai/suprnova.git?tag=v4.6.1#5112862367b76a2ea3875d0135ca4ca1ec602c32"
+version = "4.6.2"
+source = "git+https://github.com/eas4ai/suprnova.git?tag=v4.6.2#1c8b2d07b65b120337b06c975522f850a340a418"
 dependencies = [
  "aes-gcm",
  "ammonia",
@@ -6724,6 +6724,7 @@ dependencies = [
  "fake",
  "featureflag",
  "fixed_decimal",
+ "flate2",
  "fluent-bundle",
  "fluent-langneg 0.14.2",
  "fluent-syntax",
@@ -6825,8 +6826,8 @@ dependencies = [
 
 [[package]]
 name = "suprnova-live"
-version = "4.6.1"
-source = "git+https://github.com/eas4ai/suprnova.git?tag=v4.6.1#5112862367b76a2ea3875d0135ca4ca1ec602c32"
+version = "4.6.2"
+source = "git+https://github.com/eas4ai/suprnova.git?tag=v4.6.2#1c8b2d07b65b120337b06c975522f850a340a418"
 dependencies = [
  "askama",
  "askama_parser",
@@ -6852,8 +6853,8 @@ dependencies = [
 
 [[package]]
 name = "suprnova-macros"
-version = "4.6.1"
-source = "git+https://github.com/eas4ai/suprnova.git?tag=v4.6.1#5112862367b76a2ea3875d0135ca4ca1ec602c32"
+version = "4.6.2"
+source = "git+https://github.com/eas4ai/suprnova.git?tag=v4.6.2#1c8b2d07b65b120337b06c975522f850a340a418"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6864,8 +6865,8 @@ dependencies = [
 
 [[package]]
 name = "suprnova-magnetar"
-version = "4.6.1"
-source = "git+https://github.com/eas4ai/suprnova.git?tag=v4.6.1#5112862367b76a2ea3875d0135ca4ca1ec602c32"
+version = "4.6.2"
+source = "git+https://github.com/eas4ai/suprnova.git?tag=v4.6.2#1c8b2d07b65b120337b06c975522f850a340a418"
 dependencies = [
  "aes-gcm",
  "apple",
@@ -6896,8 +6897,8 @@ dependencies = [
 
 [[package]]
 name = "suprnova-markdown"
-version = "0.5.5"
-source = "git+https://github.com/eas4ai/suprnova-markdown.git?tag=v0.5.5#1d2650a315a1f424931f2362355fc8ad9dd28b45"
+version = "0.5.6"
+source = "git+https://github.com/eas4ai/suprnova-markdown.git?tag=v0.5.6#212d94b05716a257a37070ad4b66739161af4adf"
 dependencies = [
  "async-trait",
  "suprnova",
@@ -6906,8 +6907,8 @@ dependencies = [
 
 [[package]]
 name = "suprnova-web-push"
-version = "4.6.1"
-source = "git+https://github.com/eas4ai/suprnova.git?tag=v4.6.1#5112862367b76a2ea3875d0135ca4ca1ec602c32"
+version = "4.6.2"
+source = "git+https://github.com/eas4ai/suprnova.git?tag=v4.6.2#1c8b2d07b65b120337b06c975522f850a340a418"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -7032,10 +7033,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -8116,7 +8117,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
