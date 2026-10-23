@@ -17,4 +17,42 @@ pub struct Flash {
     pub success: Option<String>,
     /// Copy for an action that failed.
     pub error: Option<String>,
+    pub toast: Option<Toast>,
+}
+
+/// A one-time message for the page a redirect lands on.
+#[derive(InertiaProps)]
+pub struct Toast {
+    /// How the layout styles the message: `"success"`, `"info"` or
+    /// `"error"`. A string rather than an enum, because `generate-types`
+    /// types a string field as `string` and a Rust enum as `unknown`; the
+    /// constructors below are the only way the scaffold sets it.
+    pub kind: String,
+    /// The text the layout shows.
+    pub message: String,
+}
+
+impl Toast {
+    /// A message about an action that worked.
+    pub fn success(message: impl Into<String>) -> Self {
+        Self::of_kind("success", message)
+    }
+
+    /// A message that informs without judging an outcome, such as one
+    /// that must not say whether an account exists.
+    pub fn info(message: impl Into<String>) -> Self {
+        Self::of_kind("info", message)
+    }
+
+    /// A message about an action that failed.
+    pub fn error(message: impl Into<String>) -> Self {
+        Self::of_kind("error", message)
+    }
+
+    fn of_kind(kind: &str, message: impl Into<String>) -> Self {
+        Self {
+            kind: kind.to_owned(),
+            message: message.into(),
+        }
+    }
 }

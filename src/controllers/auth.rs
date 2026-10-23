@@ -10,11 +10,13 @@
 
 use serde::Deserialize;
 use suprnova::{
-    Auth, FormRequest, FrameworkError, InertiaProps, Request, Response, Validate, ValidationErrors,
-    handler, inertia_response, redirect,
+    Auth, FormRequest, FrameworkError, Inertia, InertiaProps, Redirect, Request, Response,
+    Validate, ValidationErrors, handler, inertia_response, redirect,
 };
 
-use crate::controllers::{FormFailure, InertiaCtx, errors_json, inertia_form, validation_failure};
+use crate::controllers::{
+    FormFailure, InertiaCtx, errors_json, inertia_form_with, validation_failure,
+};
 use crate::models::user::User;
 
 // ============================================================================
@@ -29,12 +31,16 @@ pub struct LoginProps {}
 
 #[handler]
 pub async fn show_login(req: Request) -> Response {
+    crate::middleware::authenticate::remember_return_to(&req);
     inertia_response!(&req, "auth/Login", LoginProps {})
 }
 
 #[derive(Deserialize, Validate)]
 pub struct LoginRequest {
-    #[validate(email(message = "Please enter a valid email address"))]
+    #[validate(
+        email(message = "Please enter a valid email address"),
+        length(max = 254, message = "Email must be at most 254 characters")
+    )]
     pub email: String,
     #[validate(length(min = 1, message = "Password is required"))]
     pub password: String,
@@ -42,7 +48,12 @@ pub struct LoginRequest {
     pub remember: bool,
 }
 
-impl FormRequest for LoginRequest {}
+impl FormRequest for LoginRequest {
+    fn prepare_for_validation(req: &mut Request) -> Result<(), FrameworkError> {
+        req.transform_input("email", |email| crate::email_address::normalize(&email));
+        Ok(())
+    }
+}
 
 /// Deliver login validation errors: re-render the page for Inertia
 /// submissions, 422 envelope for everything else.
@@ -57,7 +68,11 @@ async fn render_login(ctx: &InertiaCtx, errors: ValidationErrors) -> Response {
 #[handler]
 pub async fn login(req: Request) -> Response {
     let ctx = InertiaCtx::of(&req);
-    let form = match inertia_form::<LoginRequest>(req).await {
+    let form = match inertia_form_with::<LoginRequest>(req, |form| {
+        form.email = crate::email_address::normalize(&form.email);
+    })
+    .await
+    {
         Ok(form) => form,
         Err(FormFailure::Invalid(_, errors)) => return render_login(&ctx, errors).await,
         Err(FormFailure::Response(resp)) => return Err(*resp),
@@ -89,7 +104,7 @@ pub async fn login(req: Request) -> Response {
                     return Err(error.into());
                 }
             }
-            redirect!("/dashboard").into()
+            signed_in_redirect()
         }
         Err(FrameworkError::Domain {
             status_code: 401, ..
@@ -117,9 +132,12 @@ pub async fn show_register(req: Request) -> Response {
 
 #[derive(Deserialize, Validate)]
 pub struct RegisterRequest {
-    #[validate(length(min = 2, message = "Name must be at least 2 characters"))]
+    #[validate(length(min = 2, max = 255, message = "Name must be 2 to 255 characters"))]
     pub name: String,
-    #[validate(email(message = "Please enter a valid email address"))]
+    #[validate(
+        email(message = "Please enter a valid email address"),
+        length(max = 254, message = "Email must be at most 254 characters")
+    )]
     pub email: String,
     #[validate(length(min = 8, message = "Password must be at least 8 characters"))]
     pub password: String,
@@ -127,6 +145,11 @@ pub struct RegisterRequest {
 }
 
 impl FormRequest for RegisterRequest {
+    fn prepare_for_validation(req: &mut Request) -> Result<(), FrameworkError> {
+        req.transform_input("email", |email| crate::email_address::normalize(&email));
+        Ok(())
+    }
+
     /// Cross-field check: confirm the password and its confirmation
     /// match. Runs after the per-field rules pass, so we know each
     /// individual value is well-formed before comparing them.
@@ -157,7 +180,11 @@ fn looks_like_email_unique_error(error: &FrameworkError) -> bool {
 #[handler]
 pub async fn register(req: Request) -> Response {
     let ctx = InertiaCtx::of(&req);
-    let form = match inertia_form::<RegisterRequest>(req).await {
+    let form = match inertia_form_with::<RegisterRequest>(req, |form| {
+        form.email = crate::email_address::normalize(&form.email);
+    })
+    .await
+    {
         Ok(form) => form,
         Err(FormFailure::Invalid(_, errors)) => return render_register(&ctx, errors).await,
         Err(FormFailure::Response(resp)) => return Err(*resp),
@@ -209,7 +236,16 @@ pub async fn register(req: Request) -> Response {
         tracing::warn!(error = %err, "failed to send verification email on registration");
     }
 
-    redirect!("/dashboard").into()
+    signed_in_redirect()
+}
+
+/// Resume consent or another guarded page after sign-in or registration.
+fn signed_in_redirect() -> Response {
+    if Redirect::intended_url().is_some() {
+        Ok(Inertia::location(Redirect::intended("/dashboard")))
+    } else {
+        redirect!("/dashboard").into()
+    }
 }
 
 // ============================================================================

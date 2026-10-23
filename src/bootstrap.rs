@@ -31,7 +31,7 @@ use sea_orm_migration::MigratorTrait;
 use suprnova::{
     App, Auth, AuthConfig, AuthManager, CsrfMiddleware, DB, DevToolsConfig, EloquentUserProvider,
     FrameworkError, Frontend, IncludeMiddleware, Inertia, InertiaConfig, InertiaRootTemplate,
-    RootShare, SessionConfig, SessionMiddleware, bind, global_middleware, singleton,
+    SessionConfig, SessionMiddleware, bind, global_middleware, singleton,
 };
 
 use crate::middleware;
@@ -44,8 +44,8 @@ use crate::models::user::User;
 /// `lang`, `csrf_token`, `nonce`, `ssr` and the response's `view` data.
 /// Askama checks at compile time that every name it uses exists. Besides
 /// these parts, the template calls `crate::analytics::plausible()` for the
-/// optional analytics script, because the framework has no app-wide data for
-/// the root template (eas4ai/suprnova#157). Put the application's own head
+/// optional analytics script. Live asset URLs use `View::share` below.
+/// Put the application's own head
 /// content there: a favicon, fonts, meta tags.
 #[suprnova::inertia_root(path = "app.html")]
 pub struct AppDocument;
@@ -91,6 +91,22 @@ pub async fn register() {
     Auth::register_provider("users", Arc::new(EloquentUserProvider::<User>::new()))
         .expect("register users provider");
 
+    crate::models::note::Note::initialize_search()
+        .await
+        .expect("Failed to initialize notes search generation: check SEARCH_EMBEDDER and the search migrations");
+    suprnova::seed::register::<crate::seeders::notes::NotesSeeder>();
+    crate::live::authorize();
+    App::singleton(crate::live::registry().expect("Live component registry"));
+    suprnova::live::LiveTopics::resolve()
+        .and_then(|topics| {
+            topics.on_model_scoped::<crate::models::note::Note>(
+                "notes",
+                |note| note.user_id.to_string(),
+                &["stats"],
+            )
+        })
+        .expect("Live note topic publication");
+
     // Example: Register a trait binding with runtime config
     // bind!(dyn Database, PostgresDB::new());
 
@@ -127,6 +143,20 @@ pub fn try_register_http_stack() -> Result<(), FrameworkError> {
     // Production refuses to start without its public address, before
     // anything is registered.
     crate::controllers::require_app_url()?;
+
+    let catalog = suprnova::live::assets::live_asset_catalog()
+        .map_err(|error| FrameworkError::internal(format!("Live async assets: {error}")))?;
+    let artifact = catalog.artifact(suprnova::live::assets::ArtifactRole::AsyncEsm);
+    suprnova::View::share(
+        "live_async_url",
+        format!(
+            "{}/{}/{}",
+            suprnova::live::assets::LIVE_ASSET_PATH_PREFIX,
+            catalog.identity(),
+            artifact.file()
+        ),
+    );
+    suprnova::View::share("live_async_sri", artifact.sri().to_owned());
 
     // Response security headers and the per-request CSP nonce, outermost so
     // every response is covered. `SECURITY_HEADERS` picks the preset
@@ -190,6 +220,8 @@ pub fn try_register_http_stack() -> Result<(), FrameworkError> {
     Inertia::install(
         &InertiaConfig::new()
             .frontend(Frontend::Svelte)
+            // Load the stylesheet before the entry script runs, including in development.
+            .entry_points(["src/app.css"])
             .default_title("Nebula")
             .root_template(InertiaRootTemplate::of::<AppDocument>())
             // Every message per field, as an array, the shape the kit's own
@@ -225,7 +257,10 @@ pub fn try_register_http_stack() -> Result<(), FrameworkError> {
 
     // The `root` prop on every Inertia response: the public root pages build
     // their URLs from, so the same build runs at `/` and under a path prefix.
-    App::register_inertia_shared(Arc::new(RootShare::new()));
+    // Named shares let RenderCache check every shared prop at boot.
+    App::inertia_share_lazy("root", || async {
+        Ok::<_, FrameworkError>(suprnova::url::root())
+    });
 
     // The signed-in user, or none, on every page under `auth`, read from the
     // request's session each time a response sends it. `SharedData` in

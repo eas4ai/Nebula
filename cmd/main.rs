@@ -2,7 +2,7 @@
 
 use suprnova::Application;
 
-use nebula::{bootstrap, config, migrations, routes};
+use nebula::{agents, bootstrap, config, live, migrations, routes, schedule};
 
 // `#[suprnova::main]`, not `#[tokio::main]`: the framework loads `.env`
 // while the process is still single-threaded, then builds the runtime.
@@ -19,8 +19,11 @@ async fn main() {
         // The global middleware and the Inertia layer, on the server path
         // only: the console and the workers never install them.
         .http_bootstrap(|| async { bootstrap::register_http_stack() })
-        .routes(routes::register)
+        .try_routes_async(|| async {
+            live::routes_with_render_cache(agents::serve(routes::register())?).await
+        })
         .migrations::<migrations::Migrator>()
+        .schedule(schedule::register)
         .run()
         .await;
 }

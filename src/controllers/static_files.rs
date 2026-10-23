@@ -30,6 +30,7 @@ fn content_type(file: &str) -> Option<&'static str> {
         | "android-chrome-512x512.png"
         | "apple-touch-icon.png" => Some("image/png"),
         "site.webmanifest" => Some("application/manifest+json"),
+        "android-chrome-512x512.webp" => Some("image/webp"),
         _ => None,
     }
 }

@@ -30,7 +30,9 @@ use suprnova::{
     handler, inertia_response, redirect,
 };
 
-use crate::controllers::{FormFailure, InertiaCtx, errors_json, inertia_form, validation_failure};
+use crate::controllers::{
+    FormFailure, InertiaCtx, errors_json, inertia_form, inertia_form_with, validation_failure,
+};
 
 /// Base URL the reset token is appended to. `PasswordReset` builds
 /// `{base}?token=…`, which must resolve to the `show_reset` handler below.
@@ -55,11 +57,19 @@ pub struct ResetPasswordProps {
 
 #[derive(Deserialize, Validate)]
 pub struct SendLinkRequest {
-    #[validate(email(message = "Enter a valid email address."))]
+    #[validate(
+        email(message = "Enter a valid email address."),
+        length(max = 254, message = "Email must be at most 254 characters")
+    )]
     pub email: String,
 }
 
-impl FormRequest for SendLinkRequest {}
+impl FormRequest for SendLinkRequest {
+    fn prepare_for_validation(req: &mut Request) -> Result<(), FrameworkError> {
+        req.transform_input("email", |email| crate::email_address::normalize(&email));
+        Ok(())
+    }
+}
 
 #[derive(Deserialize, Validate)]
 pub struct ResetRequest {
@@ -97,7 +107,11 @@ pub async fn show_request(req: Request) -> Response {
 #[handler]
 pub async fn send_link(req: Request) -> Response {
     let ctx = InertiaCtx::of(&req);
-    let form = match inertia_form::<SendLinkRequest>(req).await {
+    let form = match inertia_form_with::<SendLinkRequest>(req, |form| {
+        form.email = crate::email_address::normalize(&form.email);
+    })
+    .await
+    {
         Ok(form) => form,
         Err(FormFailure::Invalid(_, errors)) => {
             return if ctx.wants_inertia() {

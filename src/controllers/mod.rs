@@ -1,6 +1,9 @@
+pub mod agents;
 pub mod auth;
 pub mod dashboard;
 pub mod home;
+pub mod note_tools;
+pub mod notes;
 pub mod password_reset;
 pub mod profile;
 pub mod static_files;
@@ -147,7 +150,16 @@ pub(crate) enum FormFailure<T> {
 /// bag), but hand validation failures back to the caller together with the
 /// parsed form so Inertia submissions can re-render the originating page
 /// instead of receiving the API-style 422 envelope.
-pub(crate) async fn inertia_form<T: FormRequest>(mut req: Request) -> Result<T, FormFailure<T>> {
+pub(crate) async fn inertia_form<T: FormRequest>(req: Request) -> Result<T, FormFailure<T>> {
+    inertia_form_with(req, |_| {}).await
+}
+
+/// Apply field normalization before validation when retaining a failed Inertia form.
+/// `Request::input` does not apply FormRequest's deferred input transforms.
+pub(crate) async fn inertia_form_with<T: FormRequest>(
+    mut req: Request,
+    normalize: impl FnOnce(&mut T) + Send,
+) -> Result<T, FormFailure<T>> {
     if let Err(err) = T::prepare_for_validation(&mut req) {
         return Err(FormFailure::Response(Box::new(err.into())));
     }
@@ -159,10 +171,12 @@ pub(crate) async fn inertia_form<T: FormRequest>(mut req: Request) -> Result<T, 
 
     // `input()` dispatches on Content-Type (JSON or form-urlencoded),
     // matching the body shapes the Inertia client sends.
-    let form: T = match req.input().await {
+    let mut form: T = match req.input().await {
         Ok(form) => form,
         Err(err) => return Err(FormFailure::Response(Box::new(err.into()))),
     };
+
+    normalize(&mut form);
 
     // As `FormRequest::extract` does since Suprnova 4.0: both hooks run
     // after the field rules, and the response carries every error at once,

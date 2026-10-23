@@ -6,12 +6,14 @@ mod m20240101_000003_create_remember_tokens_table;
 mod m20240101_000004_add_email_verified_at_to_users;
 mod m20240101_000005_create_auth_flow_tokens;
 
+mod m20261023_000001_create_notes_table;
+
 pub struct Migrator;
 
 #[async_trait::async_trait]
 impl MigratorTrait for Migrator {
     fn migrations() -> Vec<Box<dyn MigrationTrait>> {
-        vec![
+        let mut migrations: Vec<Box<dyn MigrationTrait>> = vec![
             Box::new(m20240101_000001_create_users_table::Migration),
             Box::new(m20240101_000002_create_sessions_table::Migration),
             Box::new(m20240101_000003_create_remember_tokens_table::Migration),
@@ -24,6 +26,16 @@ impl MigratorTrait for Migrator {
             Box::new(suprnova::session::migrations::CreateSessionsTable::new(
                 suprnova::session::migrations::SessionUserKey::Integer,
             )),
-        ]
+            Box::new(suprnova::auth::migrations::UniqueEmailIgnoringCase::on(
+                "app_users",
+                "email",
+            )),
+            Box::new(m20261023_000001_create_notes_table::Migration),
+            Box::new(suprnova::render_cache::migration::Migration),
+        ];
+        migrations.extend(suprnova::search::migrations());
+        migrations.extend(suprnova::recommendations::migrations());
+        migrations.extend(suprnova::agents::migrations());
+        migrations
     }
 }

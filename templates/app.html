@@ -27,7 +27,17 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
+    <meta name="suprnova-live-root" content="{{ suprnova::url::root() }}" />
     {{ title }}
+    {% if let Ok(url) = "live_async_url"|value::<String> %}
+    {% if let Ok(sri) = "live_async_sri"|value::<String> %}
+    {% if let Some(nonce) = nonce %}
+    <script type="module" src="{{ suprnova::url::root() }}{{ url }}" integrity="{{ sri }}" crossorigin="anonymous" nonce="{{ nonce }}"></script>
+    {% else %}
+    <script type="module" src="{{ suprnova::url::root() }}{{ url }}" integrity="{{ sri }}" crossorigin="anonymous"></script>
+    {% endif %}
+    {% endif %}
+    {% endif %}
     {{ head }}
     {# Plausible analytics, when PLAUSIBLE_SRC and PLAUSIBLE_DOMAIN are set (src/analytics.rs). #}
     {% if let Some(plausible) = crate::analytics::plausible() %}

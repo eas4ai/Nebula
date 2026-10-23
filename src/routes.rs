@@ -1,4 +1,4 @@
-use suprnova::{StaticFiles, delete, get, group, patch, post, put, routes};
+use suprnova::{ConsentPageHeaders, StaticFiles, delete, get, group, patch, post, put, routes};
 
 use crate::controllers;
 use crate::middleware;
@@ -55,11 +55,37 @@ routes! {
         .middleware(middleware::authenticate::auth())
         .with_head(|head| head.robots("noindex")),
 
+    // Agents: the approval page an MCP client sends the user to, the claim
+    // page an agent sends the user to, and the user's connected agents
+    // (`controllers::agents`, served with `src/agents.rs`). A guest who
+    // opens the first two signs in and comes back. `ConsentPageHeaders`
+    // keeps every answer here out of frames, caches and referrers. No route
+    // here offers a tool: consent comes from the person.
+    group!("/", {
+        get!("/oauth/approve", controllers::agents::approval).name("agents.approval"),
+        post!("/oauth/approve", controllers::agents::decide).name("agents.decide"),
+        get!("/agent/claim", controllers::agents::claim).name("agents.claim"),
+        post!("/agent/claim", controllers::agents::confirm).name("agents.confirm"),
+    }).middleware(ConsentPageHeaders),
+    group!("/", {
+        get!("/connected-agents", controllers::agents::connected).name("agents.connected"),
+        post!("/connected-agents/clients/{grant}/revoke", controllers::agents::revoke_client)
+            .name("agents.clients.revoke"),
+        post!("/connected-agents/agents/{registration}/revoke", controllers::agents::revoke_agent)
+            .name("agents.accounts.revoke"),
+    }).middleware(middleware::authenticate::auth()).middleware(ConsentPageHeaders),
+
     // Authenticated AND email-verified. `verified()` composes after `auth()`,
     // so an unverified user is redirected to `/verify-email` and an
     // unauthenticated one to `/login`.
     group!("/", {
         get!("/dashboard", controllers::dashboard::index),
+        get!("/notes", controllers::notes::index).name("notes.index")
+            .with_tools(["search_notes", "create_note"]),
+        get!("/notes/search", controllers::note_tools::search).name("notes.search"),
+        get!("/notes/{id}", controllers::notes::show).name("notes.show"),
+        post!("/notes", controllers::notes::store).name("notes.store"),
+        post!("/notes/tools", controllers::note_tools::create).name("notes.create"),
     })
         .middleware(middleware::authenticate::auth())
         .middleware(middleware::authenticate::verified())

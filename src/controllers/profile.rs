@@ -27,7 +27,9 @@ use suprnova::{
     Validate, ValidationErrors, handler, hashing, inertia_response, redirect,
 };
 
-use crate::controllers::{FormFailure, InertiaCtx, errors_json, inertia_form, validation_failure};
+use crate::controllers::{
+    FormFailure, InertiaCtx, errors_json, inertia_form, inertia_form_with, validation_failure,
+};
 use crate::models::user::User;
 
 // ============================================================================
@@ -47,13 +49,21 @@ pub struct ProfileProps {
 
 #[derive(Deserialize, Validate)]
 pub struct UpdateProfileRequest {
-    #[validate(length(min = 1, message = "Name is required."))]
+    #[validate(length(min = 1, max = 255, message = "Name must be 1 to 255 characters."))]
     pub name: String,
-    #[validate(email(message = "Enter a valid email address."))]
+    #[validate(
+        email(message = "Enter a valid email address."),
+        length(max = 254, message = "Email must be at most 254 characters.")
+    )]
     pub email: String,
 }
 
-impl FormRequest for UpdateProfileRequest {}
+impl FormRequest for UpdateProfileRequest {
+    fn prepare_for_validation(req: &mut Request) -> Result<(), FrameworkError> {
+        req.transform_input("email", |email| crate::email_address::normalize(&email));
+        Ok(())
+    }
+}
 
 #[derive(Deserialize, Validate)]
 pub struct UpdatePasswordRequest {
@@ -148,7 +158,11 @@ pub async fn show(req: Request) -> Response {
 #[handler]
 pub async fn update(req: Request) -> Response {
     let ctx = InertiaCtx::of(&req);
-    let form = match inertia_form::<UpdateProfileRequest>(req).await {
+    let form = match inertia_form_with::<UpdateProfileRequest>(req, |form| {
+        form.email = crate::email_address::normalize(&form.email);
+    })
+    .await
+    {
         Ok(form) => form,
         Err(FormFailure::Invalid(_, errors)) => return render_profile(&ctx, errors).await,
         Err(FormFailure::Response(resp)) => return Err(*resp),
