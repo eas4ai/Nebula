@@ -16,11 +16,13 @@ production-shaped account story on day one:
   address is registered.
 - **Profile management** - update name/email (changing the email re-triggers
   verification), change password, delete the account.
+- **Private notes with search**, Live dashboard counts, and scoped notes tools.
+- **Agent consent** - MCP, OAuth approvals, agent claims and connected-agent management.
 - **A branded frontend** - Inertia 3 + Svelte 5 (runes) +
   [shadcn-svelte](https://www.shadcn-svelte.com), dark by default, with the
   Nebula icon set served at the web root.
 
-The backend is Rust on Suprnova 4.1.0; the frontend is a Vite + Tailwind v4 SPA
+The backend is Rust on Suprnova 4.6.1; the frontend is a Vite + Tailwind v4 SPA
 bridged over Inertia, with server-side rendering for first visits. Everything below is wired and tested - clone it,
 rename it, build your app on top.
 
@@ -34,10 +36,10 @@ in the [Suprnova manual](https://github.com/eas4ai/suprnova/blob/main/manual/sta
 
 ## Quickstart
 
-You'll need Rust (stable), Node 20+, and the Suprnova CLI:
+You'll need Rust (stable), Node 24+, and the Suprnova CLI:
 
 ```bash
-cargo install --git https://github.com/eas4ai/suprnova.git --tag v4.1.0 suprnova-cli
+cargo install --git https://github.com/eas4ai/suprnova.git --tag v4.6.1 suprnova-cli
 ```
 
 Then:
@@ -46,6 +48,8 @@ Then:
 git clone <your-fork-of-this-kit> my-app
 cd my-app
 cp .env.example .env
+cargo run -- agents:key
+# Store the printed AGENT_AUTH_KEY_ID and AGENT_AUTH_PRIVATE_KEY in your environment.
 suprnova serve
 ```
 
@@ -58,6 +62,13 @@ Vite supplies JS/CSS and renders first visits on the server through
 
 Prefer raw cargo? `cargo run --bin nebula` runs the backend
 alone; pair it with `npm run dev` in `frontend/`.
+
+Keep the same agent signing pair across restarts and replicas. It is separate from
+`APP_KEY`, which encrypts sessions and must also stay unchanged in a deployed app.
+
+The kit keeps framework defaults off and lists its production features explicitly.
+Only `agents` is added for this upgrade; media search, pgvector and CloudFront stay
+opt-in. Run the scheduler to prune retained search analytics daily.
 
 ### Your first registration
 
@@ -117,19 +128,22 @@ keep it in sync with how you actually reach the app. `.env.example` sets
 `http://localhost:8080`, matching `SERVER_PORT`. Unset, development and
 test runs fall back to `http://localhost:8765`, and production refuses to
 start: there it must be an absolute `http://` or `https://` URL with a
-host, and a loopback host such as `localhost` starts with a warning. If you serve the kit on a named TLS dev URL via `suprnova dev:tls`,
+host, and a loopback host such as `localhost` starts with a warning. The
+OAuth issuer also requires HTTPS except on a loopback host. If you serve the kit on a named TLS dev URL via `suprnova dev:tls`,
 set `APP_URL=https://<name>.localhost` so emailed links land on the right
 origin.
 
 ## Make it yours
 
 **Brand assets.** The icon set lives in the top-level `public/` directory
-(`favicon.ico`, the PNG sizes, `apple-touch-icon.png`,
-`site.webmanifest`). Replace those files with your own and the whole app
+(`favicon.ico`, the PNG sizes, `android-chrome-512x512.webp`,
+`apple-touch-icon.png`, `site.webmanifest`). Replace those files with your own and the whole app
 follows - the tags that reference them are in
 `templates/app.html`. `BrandingFiles` in `src/controllers/static_files.rs`
 serves them before the session, with a day-long public cache and no
-cookie; add any new root-level file to its whitelist there.
+cookie; add any new root-level file to its whitelist there. The manifest uses
+the quality-85 WebP icon to stay within the page budget. Keep the original
+PNG for social metadata and old links; regenerate the WebP when rebranding.
 
 **Colors.** The UI is [shadcn-svelte](https://www.shadcn-svelte.com) on
 OKLCH theme tokens in `frontend/src/app.css`: `:root` holds the light
@@ -223,7 +237,7 @@ middleware like `LlmsTxt`, follows four rules:
 2. **Caching.** Serve twins of pages that can stop being public (drafts,
    deleted or private pages) with `MarkdownMiddleware::new(..).max_age(0)`.
 3. **Methods and errors.** Answer only `GET` and `HEAD`, and answer a
-   failed lookup with a 500 that hides the error text. Plugin v0.3.0 does
+   failed lookup with a 500 that hides the error text. Plugin v0.5.5 does
    both for twins: it sends only `GET` and `HEAD` to the source, logs a
    failed lookup and answers a generic 500 marked `no-store`. A middleware
    you write yourself must check the method itself, as `LlmsTxt` does.
@@ -311,7 +325,8 @@ The server refuses to start in production without `APP_URL`, an absolute
 and `/llms.txt` are built from it.
 
 Set `APP_ENV=production` (an unset `APP_ENV` is production too),
-`APP_DEBUG=false`, a generated `APP_KEY`, the public `APP_URL`, and
+`APP_DEBUG=false`, a generated `APP_KEY`, the agent signing pair
+`AGENT_AUTH_KEY_ID` / `AGENT_AUTH_PRIVATE_KEY`, the public `APP_URL`, and
 `SESSION_SECURE=true`. Configure a delivering mail driver such as SMTP;
 production boot rejects the development `log` driver.
 
@@ -324,8 +339,13 @@ limits, which reset on restart.
 ## Testing
 
 ```bash
+(cd frontend && npm ci && npm run check && npm run build)
 cargo test
 ```
+
+Build assets first: the HTTP suite checks their cache headers, and
+`tests/page_budget.rs` audits the public entry pages through the full server
+router, including agents, Live assets and RenderCache.
 
 Two complementary suites cover the account flows end-to-end:
 
@@ -348,4 +368,4 @@ second points at HTTP wiring.
 
 ## Upgrading
 
-For the Suprnova 4.1.0 upgrade (Nebula 3.0.0), follow [UPGRADE.md](UPGRADE.md), including production configuration and rollback steps.
+For the Suprnova 4.6.1 upgrade (Nebula 3.1.0), follow [UPGRADE.md](UPGRADE.md), including production configuration and rollback steps.

@@ -24,10 +24,11 @@ async fn clear_test_rows(connection: &DatabaseConnection) {
     let tables = connection
         .query_all_raw(Statement::from_string(
             DbBackend::Sqlite,
-            "SELECT name FROM sqlite_master \
-             WHERE type = 'table' \
+            "SELECT name FROM pragma_table_list \
+             WHERE schema = 'main' AND type = 'table' \
              AND name NOT LIKE 'sqlite_%' \
-             AND name <> 'seaql_migrations'",
+             AND name <> 'seaql_migrations' \
+             AND name <> 'suprnova_render_epochs'",
         ))
         .await
         .expect("list SQLite test tables");
@@ -50,6 +51,8 @@ async fn clear_test_rows(connection: &DatabaseConnection) {
             .await
             .unwrap_or_else(|error| panic!("drop SQLite test trigger {name}: {error}"));
     }
+    // Keep RenderCache's migrated singleton row. SQLite manages virtual
+    // search tables and their shadow tables; clearing those corrupts FTS.
     for table in tables {
         let name: String = table.try_get("", "name").expect("SQLite table name");
         let quoted = name.replace('"', "\"\"");

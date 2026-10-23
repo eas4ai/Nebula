@@ -1,5 +1,88 @@
 # Upgrade Guide
 
+## Nebula 3.0.0 → 3.1.0
+
+Release `v3.1.0` upgrades Suprnova from 4.1.0 to 4.6.1 and `suprnova-markdown` from 0.3.0 to 0.5.5. It brings the kit to the current Svelte template shape while keeping Nebula's account flows, shadcn-svelte UI, branding, SEO, Markdown twins and optional Plausible analytics. Rust, frontend and npm lockfile package versions are 3.1.0. Cargo.lock resolves the framework tag to `5112862367b76a2ea3875d0135ca4ca1ec602c32` and the Markdown tag to `1d2650a315a1f424931f2362355fc8ad9dd28b45`.
+
+### Prepare and merge
+
+Commit local changes. Preserve `.env`, the existing `APP_KEY`, database, custom brand files and previous deployment artifacts. Take a consistent SQLite backup or PostgreSQL `pg_dump`; a live SQLite file copy can miss WAL data.
+
+With `upstream` set to `https://github.com/eas4ai/Nebula.git`:
+
+```bash
+git fetch upstream refs/tags/v3.1.0
+git switch -c upgrade/suprnova-4.6.1
+git merge --no-ff FETCH_HEAD
+```
+
+Keep your configuration and the release lockfiles. Do not copy the fresh-install environment file over a deployed copy or replace its `APP_KEY`.
+
+Before migrating, check for existing accounts whose addresses differ only in case:
+
+```sql
+SELECT LOWER(email), COUNT(*)
+FROM app_users
+GROUP BY LOWER(email)
+HAVING COUNT(*) > 1;
+```
+
+Resolve those duplicates before deploying. The new case-insensitive email index refuses them. On MySQL and MariaDB, the email column needs its unique index and a case-insensitive collation where expression indexes are unavailable. After the upgrade, an accented address must match the stored address after normalization; an unaccented spelling no longer signs in as the accented account. Address input is trimmed and folded to ASCII lowercase before validation, with a 254-character limit. Names are bounded at 255 characters. If Magnetar warns about existing addresses over 254 characters, correct those accounts before their next sign-in.
+
+### What changes
+
+- **Feature list.** Framework defaults stay off. The existing production features are retained, with `agents` added for the new tools and consent pages. The test dependency also keeps defaults off and adds only `testing`. Media search, pgvector and CloudFront are not enabled by this release.
+- **Stylesheet entry.** `src/app.css` is an explicit entry in `InertiaConfig` and `frontend/vite.config.ts`; its import is removed from `frontend/src/main.ts`. The server loads it as a nonce-bearing stylesheet link, so a first page is styled before JavaScript runs, including under Vite in development.
+- **Notes and search.** New `/notes` pages list, search and create the signed-in user's notes. The owner key references Nebula's existing signed `app_users.id`. Deleting an account deletes its notes. Search is scoped to the owner, and pagination uses `result.pagination.has_more`, including at the accessible hit cap. Bootstrap provisions the first notes search generation. `NotesSeeder` adds examples to the first registered account with `suprnova db:seed --class=NotesSeeder`; it refuses an empty users table. The scheduler registers daily `search:analytics-prune`; run your normal scheduler worker if you use search analytics.
+- **Agents.** `src/agents.rs` serves `/mcp`, OAuth discovery and agent accounts. The kit owns the approval, claim and connected-agents pages. Their routes use `ConsentPageHeaders` and CSRF protection; an agent cannot approve consent for a person. `search_notes` and `create_note` act only for the caller's user under `notes:read` and `notes:write`. The notes page offers those tools to WebMCP. Sign-in accepts a same-origin `return_to` and resumes it after login or registration. Existing account verification rules remain in place.
+- **Agent signing key.** Every environment now needs `AGENT_AUTH_KEY_ID` and `AGENT_AUTH_PRIVATE_KEY` before the server can install its routes. Generate a pair with the new binary's `agents:key` command and store both in your secret configuration. Use the same pair across replicas and restarts. Keep `APP_KEY` unchanged; these are separate keys.
+- **Live and RenderCache.** `cmd/main.rs` now serves `live::routes_with_render_cache(agents::serve(routes::register())?)`. Bootstrap and the page-budget test both call `live::authorize()` for the private notes topic. The dashboard keeps its existing `user` prop and adds deferred note counts, optional recent notes, and per-user Live refreshes, with polling as a fallback. Suprnova 4.6.1 also fixes the framework stack use below Live actions in debug builds; no application change is needed for that fix. Every Inertia document loads the framework's versioned Live script from `/__live/assets` with integrity and the CSP nonce. Keep those routes reachable through your proxy. RenderCache installs after the HTTP stack; individual application pages still need an explicit cache policy to be stored. Set a new `APP_BUILD_ID` on each deployment if you enable stored representations.
+- **Named shared props.** `root` now uses `App::inertia_share_lazy("root", ...)`, as `auth` already does. A cacheable Inertia route with an opaque shared-data provider or middleware hook now fails boot. Port custom hooks to named shares before enabling caching, and declare each cached page's public and per-request props as the framework's RenderCache chapter describes.
+- **Migrations.** The existing migrations and their order remain. The migrator appends the case-insensitive email index, the notes table, RenderCache's generation ledger, search and recommendation migrations, and the agent tables. Search's source versions and recommendation runs' `ranking_digest` are included. Magnetar continues to migrate at bootstrap, adding its email-verification digest and agent schema as needed.
+- **Manifest icon.** The web app manifest uses a new quality-85 WebP copy of the 512px brand icon, reducing it from 589,260 to 42,818 bytes. The original PNG remains available for existing links and social metadata. Deploy the WebP alongside your brand files, and regenerate it from your own icon if your deployed copy uses a custom brand.
+- **Static caching.** Vite-fingerprinted assets now carry `public, max-age=31536000, immutable`. Other `StaticFiles` responses default to one hour unless configured otherwise. The branding whitelist retains its one-day policy. An unchanged session no longer adds session or XSRF cookies to a public response; a response that must deliver a cookie or embeds a CSRF token is private and unstored. Purge shared caches that may hold earlier responses with cookies. Never overwrite a fingerprinted asset in place.
+- **Frontend helpers.** `src/lib/agents`, `live`, `stream` and `static` come from the current templates. Stream requests prefer the fresh XSRF cookie, readers with one id share state, event streams reconnect, and cancellation cannot overwrite a replacement request. The entry installs page tools and the static HTTP client. Static publication remains opt-in. Frontend package versions follow the current templates, including Svelte, Vite, their plugin, checks and Node types; Inertia remains at `^3.8.0`. `webmcp-types` is added. Nebula's UI dependencies remain.
+- **Generated types and budget test.** `suprnova generate-types` now writes `frontend/src/types/tool-schemas.ts` as well as the page props. Integer schemas carry bounds without Rust-specific `format` values. Commit both generated files. `tests/page_budget.rs` audits the public entry pages and their assets through the same agent, Live and RenderCache router as the server, including the Live script. Build the frontend before running it.
+
+### Build and migrate
+
+Use Rust 1.94+ and Node 24 with npm. Install the matching CLI:
+
+```bash
+cargo install --force --locked --git https://github.com/eas4ai/suprnova.git --tag v4.6.1 suprnova-cli
+suprnova generate-types
+(cd frontend && npm ci && npm run check && npm run build && npm run build:ssr)
+cargo build --locked --release --bins
+cargo test --locked
+```
+
+Generate the new agent signing pair once, without replacing your application encryption key:
+
+```bash
+./target/release/nebula agents:key
+```
+
+Store its two values in the deployment's secret configuration before starting the server. Stop writers, back up, then migrate once with that configuration:
+
+```bash
+./target/release/nebula migrate
+./target/release/nebula serve --no-migrate
+```
+
+On MySQL and MariaDB, Magnetar's first boot widens columns in `auth_sessions`, `auth_methods`, `auth_ceremonies`, `auth_two_factor` and `auth_provider_tokens`. Table copies can block writes. Use a quiet window, start one instance first, and give its health check enough time to finish. A custom index can leave a column narrow with a warning; resolve that index before retrying. SQLite and PostgreSQL do not need that widening.
+
+Deploy both binaries, `public/assets/`, the brand files, and `frontend/bootstrap/ssr/` together. Keep frontend dependencies on the host for the SSR worker and supervise `node bootstrap/ssr/ssr.js` from `frontend/`, as in 3.0.0. Keep the existing production mail, HTTPS, session, rate-limit and analytics settings.
+
+### Verify and roll back
+
+The release lockfile includes targeted updates for the RustSec advisories as well as the framework and Markdown pins. Keep `.cargo/audit.toml` when merging: it copies Suprnova's exception for RUSTSEC-2026-0235, the inactive `rust_decimal` compatibility edge to `rkyv` 0.7.46. No compatible fixed release exists on that line, and neither `rkyv` nor `rkyv_derive` appears in Nebula's resolved dependency tree, including all features and targets. Recheck that reachability before enabling new dependency features and revisit the exception by its 2026-11-14 expiry.
+
+`cargo audit` exits successfully with zero reported vulnerabilities under that policy on 2026-10-23. It reports six unmaintained dependency warnings: `basic-toml` (RUSTSEC-2026-0374) through Askama, `bincode` (RUSTSEC-2025-0141) and `yaml-rust` (RUSTSEC-2024-0320) through Syntect, `paste` (RUSTSEC-2024-0436) through Tokenizers, `proc-macro-error2` (RUSTSEC-2026-0173) through derive macros, and `ttf-parser` (RUSTSEC-2026-0192) through Fontdue. These advisories have no patched releases; their consumers need to adopt maintained alternatives. They remain visible in the audit.
+
+Check that JS/CSS and `/__live/assets` load, that the first page is styled, and that built assets have the one-year immutable policy without cookies. Check registration, login and logout, existing sessions, reset and verification mail, profile changes and deletion, and the Error page. Then verify notes search and owner isolation, dashboard counts, the connected-agents page, and consent returning through sign-in. Run `cargo test --test page_budget` against the deployed build assets, and inspect the browser console for CSP violations.
+
+If validation fails, stop writers and restore the previous binaries, assets and configuration. Restore the database backup if the added migrations or first-boot schema changes need to be undone; do not drop tables that now hold user notes or agent grants. Preserve the matching `APP_KEY` and keep the previous deployment until recovery is verified.
+
 ## Nebula 2.0.1 → 3.0.0
 
 Release `v3.0.0` upgrades Suprnova from 3.2.1 to 4.1.0 and brings the kit to the shape `suprnova new` generates at 4.1.0. Rust, frontend and npm lockfile package versions are 3.0.0. The framework tag resolves to `3aa40bd7c266d41d86a21c0eebbbb1d5a2d09d1d` in Cargo.lock.
