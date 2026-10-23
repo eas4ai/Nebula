@@ -36,6 +36,7 @@
           id="email"
           type="email"
           autocomplete="email"
+          maxlength={254}
           placeholder="you@example.com"
           required
           aria-invalid={!!form.errors.email}

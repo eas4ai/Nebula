@@ -35,6 +35,8 @@
         >
           Dashboard
         </Link>
+        <Link href="/notes" class="text-sm font-medium text-muted-foreground hover:text-foreground">Notes</Link>
+        <Link href="/connected-agents" class="text-sm font-medium text-muted-foreground hover:text-foreground">Connected agents</Link>
       {/if}
 
       <div class="ml-auto flex items-center gap-1 sm:gap-2">

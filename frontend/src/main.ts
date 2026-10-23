@@ -1,9 +1,10 @@
-import './app.css'
-import { createInertiaApp } from '@inertiajs/svelte'
+import { createInertiaApp, router } from '@inertiajs/svelte'
 import { hydrate, mount } from 'svelte'
 import AppLayout from '$lib/layouts/AppLayout.svelte'
 import GuestLayout from '$lib/layouts/GuestLayout.svelte'
 import { showFlashAsToasts } from '$lib/flash.js'
+import { installPageTools } from '$lib/agents'
+import { staticHttpClient } from '$lib/static'
 
 // Exception text can include copied URLs or credentials even without request context.
 function redactBrowserText(text: string): string {
@@ -148,14 +149,17 @@ showFlashAsToasts()
 const nonce =
   document.querySelector<HTMLMetaElement>('meta[property="csp-nonce"]')?.nonce || undefined
 
+installPageTools(router)
+
 createInertiaApp({
+  http: staticHttpClient(),
   // `@inertiajs/vite` turns this into the page resolver: `auth/Login` loads
   // `./pages/auth/Login.svelte`, each page in its own chunk.
   pages: './pages',
   // Pages under `auth/` sit in the guest frame and every other page in the
   // app frame. A page can still export its own `layout` from
   // <script module>. `ssr.ts` must pick the same way.
-  layout: (name) => (name.startsWith('auth/') ? GuestLayout : AppLayout),
+  layout: (name) => ((name.startsWith('auth/') || name === 'Agents/Approve' || name === 'Agents/Claim') ? GuestLayout : AppLayout),
   // Head tags a handler sets from Rust arrive as the `head` page prop; the
   // client keeps them in the document across visits.
   serverHead: true,

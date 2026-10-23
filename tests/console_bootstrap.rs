@@ -54,10 +54,9 @@ async fn console_initializes_encryption_only_for_real_commands() {
         "test",
         Some("AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"),
     );
+    assert!(!output.status.success());
     assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy(&output.stderr).contains("NotesSeeder needs a registered account")
     );
     assert!(working.join("test.db").exists());
     // The kit migration must define defaults before Magnetar creates app_users.
@@ -73,6 +72,25 @@ async fn console_initializes_encryption_only_for_real_commands() {
     )).await.unwrap().unwrap();
     assert_eq!(row.try_get::<i64>("", "auth_epoch").unwrap(), 0);
     assert_eq!(row.try_get::<i64>("", "session_version").unwrap(), 0);
+    let seeded = run(
+        &["db:seed"],
+        "test",
+        Some("AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"),
+    );
+    assert!(
+        seeded.status.success(),
+        "{}",
+        String::from_utf8_lossy(&seeded.stderr)
+    );
+    let notes = db
+        .query_one_raw(Statement::from_string(
+            DbBackend::Sqlite,
+            "SELECT COUNT(*) AS count FROM notes",
+        ))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(notes.try_get::<i64>("", "count").unwrap(), 3);
     db.close().await.unwrap();
     std::fs::remove_dir_all(working).unwrap();
 }

@@ -35,6 +35,7 @@
           id="name"
           type="text"
           autocomplete="name"
+          maxlength={255}
           placeholder="Your name"
           required
           aria-invalid={!!form.errors.name}
@@ -49,6 +50,7 @@
           id="email"
           type="email"
           autocomplete="email"
+          maxlength={254}
           placeholder="you@example.com"
           required
           aria-invalid={!!form.errors.email}

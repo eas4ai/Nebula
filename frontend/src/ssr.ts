@@ -14,6 +14,6 @@ import GuestLayout from '$lib/layouts/GuestLayout.svelte'
 // markup the browser hydrates.
 createInertiaApp({
   pages: './pages',
-  layout: (name) => (name.startsWith('auth/') ? GuestLayout : AppLayout),
+  layout: (name) => ((name.startsWith('auth/') || name === 'Agents/Approve' || name === 'Agents/Claim') ? GuestLayout : AppLayout),
   serverHead: true,
 })

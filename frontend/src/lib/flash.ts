@@ -17,8 +17,11 @@ import { toast } from 'svelte-sonner'
  */
 export function showFlashAsToasts(): void {
   router.on('flash', (event) => {
-    const { success, error } = event.detail.flash
+    const { success, error, toast: message } = event.detail.flash
     if (success) toast.success(success)
     if (error) toast.error(error)
+    if (message?.kind === 'success') toast.success(message.message)
+    else if (message?.kind === 'error') toast.error(message.message)
+    else if (message) toast.info(message.message)
   })
 }

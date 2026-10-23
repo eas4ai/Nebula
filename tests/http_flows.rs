@@ -90,7 +90,7 @@ async fn setup() -> Harness {
     unsafe {
         std::env::set_var("APP_ENV", "test");
         std::env::set_var("MAIL_FROM", "test@nebula.test");
-        std::env::set_var("APP_URL", "http://nebula.test");
+        std::env::set_var("APP_URL", "https://nebula.test");
         // Analytics stays off unless a test turns it on.
         std::env::remove_var("PLAUSIBLE_SRC");
         std::env::remove_var("PLAUSIBLE_DOMAIN");
@@ -121,13 +121,25 @@ impl Harness {
     /// `suprnova::handle_request`. The accept loop's abort handle is stored on
     /// the harness and aborted on drop, so the server's lifetime is the test's.
     async fn spawn_app(&mut self) -> SocketAddr {
-        let router = Arc::new(nebula::routes::register());
         // Serve the HTTP stack production runs: clear what an earlier test
         // registered (the tests are serialized behind `TEST_LOCK`), run the
         // kit's own `try_register_http_stack`, and take the result. It also
         // installs Inertia and the `auth` / `root` shared props.
         suprnova::middleware::clear_global_middleware_for_test();
         nebula::bootstrap::try_register_http_stack().expect("HTTP stack");
+        suprnova::testing::install_test_agent_auth_key();
+        App::bind_if_absent::<dyn suprnova::CacheStore>(Arc::new(suprnova::InMemoryCache::new()));
+        App::singleton(nebula::live::registry().expect("Live registry"));
+        nebula::live::authorize();
+        let router = nebula::live::routes_with_render_cache(
+            nebula::agents::serve(nebula::routes::register()).expect("Agent routes"),
+        )
+        .await
+        .expect("Live routes and RenderCache");
+        App::singleton(
+            suprnova::live::testing::prepare_live_router_for_test(&router).expect("Live runtime"),
+        );
+        let router = Arc::new(router);
         let registry = Arc::new(MiddlewareRegistry::from_global());
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -1355,7 +1367,7 @@ async fn twin_010_llms_txt_lists_the_twins() {
         index.body
     );
     assert!(
-        lines.contains(&"- [Home](http://nebula.test/index.html.md)"),
+        lines.contains(&"- [Home](https://nebula.test/index.html.md)"),
         "no absolute link to Home's twin: {}",
         index.body
     );
@@ -1387,7 +1399,7 @@ async fn twin_011_trailing_slash_in_app_url() {
     // SAFETY: as in `twin_010_llms_txt_lists_the_twins`. The next test's
     // `setup` sets `APP_URL` back.
     unsafe {
-        std::env::set_var("APP_URL", "http://nebula.test/");
+        std::env::set_var("APP_URL", "https://nebula.test/");
     }
     let mut client = Client::new(harness.spawn_app().await);
 
@@ -1452,12 +1464,13 @@ async fn twin_013_head_prop_names_the_twin() {
 // ============================================================================
 
 /// The branding files at the web root, with their content types.
-const BRANDING: [(&str, &str); 7] = [
+const BRANDING: [(&str, &str); 8] = [
     ("/favicon.ico", "image/x-icon"),
     ("/favicon-16x16.png", "image/png"),
     ("/favicon-32x32.png", "image/png"),
     ("/android-chrome-192x192.png", "image/png"),
     ("/android-chrome-512x512.png", "image/png"),
+    ("/android-chrome-512x512.webp", "image/webp"),
     ("/apple-touch-icon.png", "image/png"),
     ("/site.webmanifest", "application/manifest+json"),
 ];
@@ -1655,7 +1668,7 @@ async fn seo_001_canonical_link_comes_from_app_url() {
         .collect();
     assert_eq!(
         canonical,
-        ["http://nebula.test/login"],
+        ["https://nebula.test/login"],
         "canonical of /login"
     );
 
@@ -1672,7 +1685,7 @@ async fn seo_001_canonical_link_comes_from_app_url() {
     assert!(
         canonical
             .iter()
-            .all(|href| href.starts_with("http://nebula.test/")),
+            .all(|href| href.starts_with("https://nebula.test/")),
         "canonical of //evil.example/x leaves APP_URL: {canonical:?}"
     );
     client.accept = None;
@@ -1683,7 +1696,7 @@ async fn seo_001_canonical_link_comes_from_app_url() {
         .filter(|tag| attr(tag, "rel") == Some("canonical"))
         .filter_map(|tag| attr(tag, "href"))
         .collect();
-    assert_eq!(canonical, ["http://nebula.test/"], "canonical of /");
+    assert_eq!(canonical, ["https://nebula.test/"], "canonical of /");
 }
 
 #[tokio::test]
@@ -1727,7 +1740,7 @@ async fn seo_003_open_graph_and_x_card() {
         for (key, expected) in [
             ("og:site_name", "Nebula"),
             ("og:type", "website"),
-            ("og:image", "http://nebula.test/android-chrome-512x512.png"),
+            ("og:image", "https://nebula.test/android-chrome-512x512.png"),
             ("twitter:card", "summary"),
         ] {
             assert!(
@@ -1831,7 +1844,7 @@ async fn seo_006_robots_txt_allows_everything_and_names_the_sitemap() {
     let lines: Vec<&str> = body.lines().map(str::trim).collect();
     assert!(lines.contains(&"User-agent: *"), "{body}");
     assert!(
-        lines.contains(&"Sitemap: http://nebula.test/sitemap.xml"),
+        lines.contains(&"Sitemap: https://nebula.test/sitemap.xml"),
         "{body}"
     );
     assert!(
@@ -1870,7 +1883,7 @@ async fn seo_007_sitemap_lists_the_public_pages() {
         body.contains("http://www.sitemaps.org/schemas/sitemap/0.9"),
         "{body}"
     );
-    assert!(body.contains("<loc>http://nebula.test/</loc>"), "{body}");
+    assert!(body.contains("<loc>https://nebula.test/</loc>"), "{body}");
 }
 
 #[tokio::test]
@@ -1918,13 +1931,13 @@ async fn seo_009_home_describes_the_site_in_json_ld() {
     let of_type = |kind: &str| blocks.iter().find(|b| b["@type"] == kind).cloned();
     let website = of_type("WebSite").unwrap_or_else(|| panic!("no WebSite JSON-LD: {blocks:?}"));
     assert_eq!(website["name"], "Nebula", "{website}");
-    assert_eq!(website["url"], "http://nebula.test/", "{website}");
+    assert_eq!(website["url"], "https://nebula.test/", "{website}");
     let org =
         of_type("Organization").unwrap_or_else(|| panic!("no Organization JSON-LD: {blocks:?}"));
     assert_eq!(org["name"], "Nebula", "{org}");
-    assert_eq!(org["url"], "http://nebula.test/", "{org}");
+    assert_eq!(org["url"], "https://nebula.test/", "{org}");
     assert_eq!(
-        org["logo"], "http://nebula.test/android-chrome-512x512.png",
+        org["logo"], "https://nebula.test/android-chrome-512x512.png",
         "{org}"
     );
 }
@@ -2081,6 +2094,7 @@ fn production_boot_stderr(run: usize, app_url: &str) -> String {
         .arg("ssr:check")
         .current_dir(&working)
         .env_clear()
+        .env("TMPDIR", std::env::temp_dir())
         .env("APP_ENV", "production")
         .env("APP_DEBUG", "false")
         .env("APP_URL", app_url)
@@ -2352,4 +2366,132 @@ async fn analytics_005_a_bad_script_url_stops_the_boot() {
             ),
         }
     }
+}
+
+#[tokio::test]
+async fn built_assets_have_immutable_cache_headers() {
+    let mut harness = setup().await;
+    let addr = harness.spawn_app().await;
+    let mut client = Client::new(addr);
+    let manifest: Value = serde_json::from_slice(
+        &std::fs::read(suprnova::public_path("assets/.vite/manifest.json"))
+            .expect("build the frontend before running the HTTP suite"),
+    )
+    .expect("Vite manifest");
+    for entry in ["src/main.ts", "src/app.css"] {
+        let file = manifest[entry]["file"].as_str().expect("built entry");
+        let response = client.get(&format!("/assets/{file}")).await;
+        assert_eq!(response.status, 200, "built entry {entry}");
+        assert_eq!(
+            header(&response, "cache-control"),
+            Some("public, max-age=31536000, immutable")
+        );
+        assert!(!response.headers.contains_key("set-cookie"));
+    }
+}
+
+#[tokio::test]
+async fn notes_search_tools_and_live_stay_with_the_owner() {
+    let mut harness = setup().await;
+    suprnova::Queue::set_driver(Arc::new(suprnova::queue::SyncQueueDriver::new()));
+    nebula::models::note::Note::initialize_search()
+        .await
+        .expect("notes search generation");
+    let addr = harness.spawn_app().await;
+    let mut owner = User::create("Note Owner", "notes@example.test", "supersecret")
+        .await
+        .unwrap();
+    mark_verified(&mut owner).await;
+    let other = User::create("Other Owner", "other@example.test", "supersecret")
+        .await
+        .unwrap();
+    let private_note = <nebula::models::note::Note as suprnova::Model>::create(suprnova::attrs! {
+        user_id: other.id,
+        title: "Private garden planning",
+        body: Some("Another account's private note".to_owned()),
+    })
+    .await
+    .unwrap();
+    let mut client = Client::new(addr);
+    assert_eq!(client.get("/notes").await.location(), "/login");
+    assert_eq!(client.get("/login").await.status, 200);
+    let login = client
+        .post_json(
+            "/login",
+            json!({"email": owner.email, "password": "supersecret"}),
+        )
+        .await;
+    assert!(matches!(login.status, 302 | 409));
+    let created = client
+        .post_json(
+            "/notes/tools",
+            json!({"title": "Garden planning", "body": "Planting flowers"}),
+        )
+        .await;
+    assert_eq!(created.status, 200, "{}", created.body);
+    let search = client.get("/notes/search?query=garden").await;
+    assert_eq!(search.status, 200, "{}", search.body);
+    let found: Value = serde_json::from_str(&search.body).unwrap();
+    assert_eq!(found["notes"].as_array().unwrap().len(), 1);
+    assert_eq!(found["notes"][0]["title"], "Garden planning");
+    assert_eq!(
+        client
+            .get(&format!("/notes/{}", private_note.id))
+            .await
+            .status,
+        404
+    );
+    let dashboard = client.inertia_get("/dashboard").await;
+    assert_eq!(dashboard.status, 200, "{}", dashboard.body);
+    let page: Value = serde_json::from_str(&dashboard.body).unwrap();
+    assert_eq!(page["props"]["user"]["id"], owner.id);
+    assert!(
+        page["liveBindings"]
+            .to_string()
+            .contains(&format!("notes.{}", owner.id))
+    );
+    let connected = client.get("/connected-agents").await;
+    assert_eq!(connected.status, 200, "{}", connected.body);
+    assert!(
+        header(&connected, "cache-control")
+            .unwrap()
+            .contains("no-store")
+    );
+    suprnova::Model::delete(other).await.unwrap();
+    assert!(
+        <nebula::models::note::Note as suprnova::Model>::find(private_note.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn sign_in_normalizes_email_and_validates_return_to() {
+    let mut harness = setup().await;
+    let addr = harness.spawn_app().await;
+    let mut user = User::create("Consent User", "consent@example.test", "supersecret")
+        .await
+        .unwrap();
+    mark_verified(&mut user).await;
+    let mut client = Client::new(addr);
+    assert_eq!(
+        client
+            .get("/login?return_to=%2Fconnected-agents")
+            .await
+            .status,
+        200
+    );
+    let response = client
+        .post_json(
+            "/login",
+            json!({"email": " CONSENT@EXAMPLE.TEST ", "password": "supersecret"}),
+        )
+        .await;
+    assert_eq!(response.status, 302, "{}", response.body);
+    assert_eq!(response.location(), "/connected-agents");
+    let offsite = client.get("/login?return_to=%2F%2Fevil.example").await;
+    assert_eq!(offsite.location(), "/dashboard");
+    let onsite = client.get("/login?return_to=%2Fconnected-agents").await;
+    assert_eq!(onsite.location(), "/connected-agents");
 }

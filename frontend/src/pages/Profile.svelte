@@ -93,6 +93,7 @@
             id="name"
             type="text"
             autocomplete="name"
+          maxlength={255}
             required
             aria-invalid={!!profileForm.errors.name}
             bind:value={profileForm.name}
@@ -106,6 +107,7 @@
             id="email"
             type="email"
             autocomplete="email"
+          maxlength={254}
             required
             aria-invalid={!!profileForm.errors.email}
             bind:value={profileForm.email}
